@@ -489,25 +489,31 @@
       }
 
       const stay = [], move = [];
+      let blockedMulti = false;
       for (const f of facets) {
         const fe = f.edges || f.poly2d.map(() => "raw");
         if (!selected.has(f)) { stay.push({ poly2d: f.poly2d, edges: fe, T: f.T, order: f.order }); continue; }
-        // spine = crease edge of this facet farthest from the clicked tip
-        let spine = null, best = -1;
-        for (let i = 0; i < f.poly2d.length; i++) {
-          if (fe[i] !== "crease") continue;
-          const p1 = f.poly2d[i], p2 = f.poly2d[(i + 1) % f.poly2d.length];
-          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-          const dist = Math.hypot(mid.x - target.x, mid.y - target.y);
-          if (dist > best) { best = dist; spine = { p1, p2 }; }
+        // A flap can only be lifted cleanly if it's attached to the rest of
+        // the paper along exactly ONE fold (a free flap). Held on 0 edges =
+        // nothing to hinge on; on 2+ = lifting it rigidly would tear it.
+        const creaseIdx = [];
+        for (let i = 0; i < fe.length; i++) if (fe[i] === "crease") creaseIdx.push(i);
+        if (creaseIdx.length !== 1) {
+          if (creaseIdx.length > 1) blockedMulti = true;
+          stay.push({ poly2d: f.poly2d, edges: fe, T: f.T, order: f.order });
+          continue;
         }
-        if (!spine) { stay.push({ poly2d: f.poly2d, edges: fe, T: f.T, order: f.order }); continue; }
-        const A3 = applyT(f.T, v3(spine.p1.x, spine.p1.y, 0));
-        const B3 = applyT(f.T, v3(spine.p2.x, spine.p2.y, 0));
+        const i = creaseIdx[0];
+        const p1 = f.poly2d[i], p2 = f.poly2d[(i + 1) % f.poly2d.length];
+        const A3 = applyT(f.T, v3(p1.x, p1.y, 0));
+        const B3 = applyT(f.T, v3(p2.x, p2.y, 0));
         const k = vnorm(vsub(B3, A3));
         move.push({ poly2d: f.poly2d, edges: fe, T: f.T, P: A3, k, src: f.order, centroid2d: polyCentroid(f.poly2d) });
       }
-      if (move.length === 0) return null;
+      if (move.length === 0) {
+        if (blockedMulti) toast("That flap is held on more than one fold — it can't open without tearing");
+        return null;
+      }
 
       // Sign so the flap lifts toward +Z (open upward).
       const rep = move[0];
@@ -979,12 +985,11 @@
         { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
         { a: [-0.5, -0.25], b: [0.5, -0.25], side: [0, -0.4], type: "valley", angle: 180, layers: "all", style: "reverse" },
       ],
-      // Open-flap demo: fold into a 4-layer booklet, then lift just the top
-      // page about its spine so the layered pocket opens and you see inside.
+      // Open-flap demo: fold in half (the top layer becomes a free flap,
+      // attached along exactly one fold), then lift it open about that spine.
       squash: [
         { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
-        { a: [-0.5, 0], b: [0.5, 0], side: [0, 0.25], type: "valley", angle: 180, layers: "all" },
-        { a: [-0.5, -0.5], b: [-0.5, 0.5], side: [-0.4, -0.1], type: "valley", angle: 80, layers: "1", style: "squash" },
+        { a: [-0.5, -0.5], b: [-0.5, 0.5], side: [-0.25, 0], type: "valley", angle: 70, layers: "1", style: "squash" },
       ],
     };
 
@@ -1079,7 +1084,7 @@
       const hint = document.getElementById("styleHint");
       const msgs = {
         reverse: "Reverse fold: the tip nests into the flap. Valley = tuck inside, mountain = wrap outside. Draw the crease across a folded flap.",
-        squash: "Open flap: draw a line across the flap and click its side; the flap lifts about its spine (existing fold), opening the pocket. Use a partial angle (~100°).",
+        squash: "Open flap: lifts a free flap (one attached along a single fold) about its spine. Draw a line across it, click its side, partial angle (~70°). Flaps held by two folds can't open without tearing, so they're refused.",
       };
       hint.textContent = msgs[foldStyle] || "";
       hint.style.display = msgs[foldStyle] ? "" : "none";
