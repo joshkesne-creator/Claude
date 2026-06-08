@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Color Click</title>
+  <style>
+    :root {
+      --bg: #0f1424;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: #e6e9f0;
+      transition: background 0.4s ease;
+      user-select: none;
+    }
+    h1 {
+      margin: 0;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    #circle {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: #2f6df6;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+      transition: background 0.25s ease, transform 0.08s ease;
+    }
+    #circle:hover { transform: scale(1.04); }
+    #circle:active { transform: scale(0.93); }
+    .info {
+      display: flex;
+      gap: 28px;
+      font-size: 1.05rem;
+    }
+    .info span { opacity: 0.85; }
+    .info b { opacity: 1; }
+    .hint { font-size: 0.85rem; opacity: 0.5; }
+  </style>
+</head>
+<body>
+  <h1>Color Click</h1>
+  <button id="circle" aria-label="Color-changing circle"></button>
+  <div class="info">
+    <span>Clicks: <b id="count">0</b></span>
+    <span>Color: <b id="colorName">blue</b></span>
+  </div>
+  <div class="hint">Click the circle to change its color</div>
+
+  <script>
+    const colors = [
+      { name: "blue",    hex: "#2f6df6" },
+      { name: "green",   hex: "#2ecc71" },
+      { name: "purple",  hex: "#9b59b6" },
+      { name: "orange",  hex: "#e67e22" },
+      { name: "red",     hex: "#e74c3c" },
+      { name: "teal",    hex: "#1abc9c" },
+      { name: "pink",    hex: "#ff6bcb" },
+      { name: "yellow",  hex: "#f1c40f" },
+    ];
+
+    const circle = document.getElementById("circle");
+    const countEl = document.getElementById("count");
+    const colorNameEl = document.getElementById("colorName");
+
+    let count = 0;
+    let index = 0;
+
+    circle.addEventListener("click", () => {
+      // Pick a new color different from the current one
+      let next;
+      do {
+        next = Math.floor(Math.random() * colors.length);
+      } while (next === index && colors.length > 1);
+      index = next;
+
+      const color = colors[index];
+      circle.style.background = color.hex;
+      colorNameEl.textContent = color.name;
+
+      count++;
+      countEl.textContent = count;
+    });
+  </script>
+</body>
+</html>
