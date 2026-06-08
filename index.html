@@ -376,6 +376,32 @@
       const t = sa / (sa - sb);
       return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
     }
+    function pointOnSeg(px, py, A, B) {
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const cross = dx * (py - A.y) - dy * (px - A.x);
+      if (Math.abs(cross) > 1e-3 * (Math.hypot(dx, dy) + 1)) return false;
+      const dot = (px - A.x) * dx + (py - A.y) * dy, len2 = dx * dx + dy * dy;
+      return dot >= -1e-6 && dot <= len2 + 1e-6;
+    }
+    // Clip a labeled polygon by a half-plane. Each edge i (poly[i]->poly[i+1])
+    // carries a label "raw" (paper boundary) or "crease" (a fold). The new
+    // edge produced along the cut line is a crease; surviving edges inherit.
+    function clipWithLabels(poly, edges, sideFn, keepPositive) {
+      const cp = clipHalfPlane(poly, sideFn, keepPositive);
+      if (cp.length < 3) return { poly: cp, edges: [] };
+      const elab = [];
+      for (let i = 0; i < cp.length; i++) {
+        const p = cp[i], q = cp[(i + 1) % cp.length];
+        if (Math.abs(sideFn(p)) < 1e-6 && Math.abs(sideFn(q)) < 1e-6) { elab.push("crease"); continue; }
+        const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+        let lab = "raw";
+        for (let j = 0; j < poly.length; j++) {
+          if (pointOnSeg(mx, my, poly[j], poly[(j + 1) % poly.length])) { lab = edges[j] || "raw"; break; }
+        }
+        elab.push(lab);
+      }
+      return { poly: cp, edges: elab };
+    }
 
     // ===================== Paper model =====================
     // Each facet: { poly2d: [{x,y}] paper coords, T: transform paper->world, order }
@@ -396,6 +422,7 @@
           { x: -w/2, y: -h/2 }, { x: w/2, y: -h/2 },
           { x: w/2,  y:  h/2 }, { x: -w/2, y: h/2 },
         ],
+        edges: ["raw", "raw", "raw", "raw"],
         T: { R: IDENT.R.slice(), t: v3(0, 0, 0) },
         order: 0,
       }];
@@ -411,6 +438,7 @@
       return {
         facets: facets.map(f => ({
           poly2d: f.poly2d.map(p => ({ x: p.x, y: p.y })),
+          edges: (f.edges || []).slice(),
           T: { R: f.T.R.slice(), t: v3(f.T.t.x, f.T.t.y, f.T.t.z) },
           order: f.order,
         })),
@@ -421,6 +449,7 @@
     function restore(s) {
       facets = s.facets.map(f => ({
         poly2d: f.poly2d.map(p => ({ x: p.x, y: p.y })),
+        edges: (f.edges || []).slice(),
         T: { R: f.T.R.slice(), t: v3(f.T.t.x, f.T.t.y, f.T.t.z) },
         order: f.order,
       }));
@@ -461,16 +490,17 @@
 
       const stay = [], move = [];
       for (const f of facets) {
-        if (!selected.has(f)) { stay.push({ poly2d: f.poly2d, T: f.T, order: f.order }); continue; }
-        const stayPoly = clipHalfPlane(f.poly2d, sideFn, !foldPositive);
-        if (polyArea(stayPoly) > 0.5) stay.push({ poly2d: stayPoly, T: f.T, order: f.order });
+        const fe = f.edges || f.poly2d.map(() => "raw");
+        if (!selected.has(f)) { stay.push({ poly2d: f.poly2d, edges: fe, T: f.T, order: f.order }); continue; }
+        const sp = clipWithLabels(f.poly2d, fe, sideFn, !foldPositive);
+        if (polyArea(sp.poly) > 0.5) stay.push({ poly2d: sp.poly, edges: sp.edges, T: f.T, order: f.order });
 
-        const movePoly = clipHalfPlane(f.poly2d, sideFn, foldPositive);
-        if (polyArea(movePoly) > 0.5) {
+        const mp = clipWithLabels(f.poly2d, fe, sideFn, foldPositive);
+        if (polyArea(mp.poly) > 0.5) {
           const A3 = applyT(f.T, v3(a.x, a.y, 0));
           const B3 = applyT(f.T, v3(b.x, b.y, 0));
           const k = vnorm(vsub(B3, A3));
-          move.push({ poly2d: movePoly, T: f.T, P: A3, k, src: f.order, centroid2d: polyCentroid(movePoly) });
+          move.push({ poly2d: mp.poly, edges: mp.edges, T: f.T, P: A3, k, src: f.order, centroid2d: polyCentroid(mp.poly) });
         }
       }
       if (move.length === 0) return null;
@@ -515,10 +545,10 @@
 
     function facetsForAngle(pending, angle) {
       const out = [];
-      for (const s of pending.stay) out.push({ poly2d: s.poly2d, T: s.T, order: s.order });
+      for (const s of pending.stay) out.push({ poly2d: s.poly2d, edges: s.edges, T: s.T, order: s.order });
       for (const m of pending.move) {
         const rot = rotAboutLine(m.P, m.k, pending.sign * angle);
-        out.push({ poly2d: m.poly2d, T: composeT(rot, m.T), order: m.order });
+        out.push({ poly2d: m.poly2d, edges: m.edges, T: composeT(rot, m.T), order: m.order });
       }
       return out;
     }
@@ -591,7 +621,8 @@
         const seesFront = vdot(nWorld, toCam) >= 0;
         const intensity = 0.42 + 0.58 * Math.abs(vdot(nWorld, lightDir));
         const base = seesFront ? frontCol : backCol;
-        draw.push({ proj, depth, order: f.order, fill: shade(base, intensity), front: seesFront });
+        const edges = f.edges || f.poly2d.map(() => "raw");
+        draw.push({ proj, depth, order: f.order, fill: shade(base, intensity), front: seesFront, edges });
       }
 
       // Painter's sort: farthest (most negative cz) first; tie-break by fold order.
@@ -602,15 +633,22 @@
       });
 
       for (const d of draw) {
+        // fill
         vctx.beginPath();
         vctx.moveTo(d.proj[0].x, d.proj[0].y);
         for (let i = 1; i < d.proj.length; i++) vctx.lineTo(d.proj[i].x, d.proj[i].y);
         vctx.closePath();
         vctx.fillStyle = d.fill;
         vctx.fill();
-        vctx.lineWidth = 1;
-        vctx.strokeStyle = d.front ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.16)";
-        vctx.stroke();
+        // crease edges faint, raw (paper boundary) edges crisp
+        for (let i = 0; i < d.proj.length; i++) {
+          const p = d.proj[i], q = d.proj[(i + 1) % d.proj.length];
+          const crease = d.edges[i] === "crease";
+          vctx.beginPath(); vctx.moveTo(p.x, p.y); vctx.lineTo(q.x, q.y);
+          vctx.lineWidth = crease ? 0.75 : 1.6;
+          vctx.strokeStyle = crease ? "rgba(0,0,0,0.10)" : "rgba(20,20,28,0.55)";
+          vctx.stroke();
+        }
       }
     }
 
