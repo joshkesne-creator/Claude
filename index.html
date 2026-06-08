@@ -3,96 +3,609 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Color Click</title>
+  <title>Foldspace — Virtual Origami Paper</title>
   <style>
     :root {
-      --bg: #0f1424;
+      --bg: #11151f;
+      --panel: #1b2130;
+      --panel-2: #232b3d;
+      --text: #e7ecf5;
+      --muted: #95a0b8;
+      --accent: #6ea8fe;
+      --accent-strong: #4a89f5;
+      --line: #2e384e;
     }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(1200px 800px at 70% -10%, #1c2336, var(--bg));
+      color: var(--text);
       display: flex;
       flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      padding: 16px 22px;
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    header h1 { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: 0.3px; }
+    header .tag { color: var(--muted); font-size: 0.85rem; }
+
+    .layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      min-height: 0;
+    }
+    .sidebar {
+      border-right: 1px solid var(--line);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+    }
+    .stage {
+      position: relative;
+      display: flex;
       align-items: center;
       justify-content: center;
-      gap: 24px;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: var(--bg);
-      color: #e6e9f0;
-      transition: background 0.4s ease;
-      user-select: none;
+      padding: 24px;
+      min-width: 0;
     }
-    h1 {
+    canvas {
+      background: #0c0f17;
+      border-radius: 14px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.5), inset 0 0 0 1px var(--line);
+      touch-action: none;
+      cursor: crosshair;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .group { display: flex; flex-direction: column; gap: 8px; }
+    .group h2 {
       margin: 0;
-      font-weight: 600;
-      letter-spacing: 0.5px;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--muted);
+      font-weight: 700;
     }
-    #circle {
-      width: 200px;
-      height: 200px;
-      border-radius: 50%;
-      background: #2f6df6;
-      cursor: pointer;
-      border: none;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
-      transition: background 0.25s ease, transform 0.08s ease;
-    }
-    #circle:hover { transform: scale(1.04); }
-    #circle:active { transform: scale(0.93); }
-    .info {
+
+    .step {
       display: flex;
-      gap: 28px;
-      font-size: 1.05rem;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 0.86rem;
+      color: var(--muted);
+      line-height: 1.35;
     }
-    .info span { opacity: 0.85; }
-    .info b { opacity: 1; }
-    .hint { font-size: 0.85rem; opacity: 0.5; }
+    .step .num {
+      flex: 0 0 auto;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 0.72rem; font-weight: 700;
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--line);
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .step.active .num { background: var(--accent-strong); color: #fff; border-color: var(--accent); }
+    .step.active { color: var(--text); }
+
+    button.btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s, border-color 0.15s;
+    }
+    button.btn:hover { background: #2b3550; border-color: #3a486a; }
+    button.btn:active { transform: translateY(1px); }
+    button.btn:disabled { opacity: 0.4; cursor: default; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row .btn { flex: 1; }
+
+    .swatches { display: flex; gap: 10px; align-items: center; }
+    .swatch { display: flex; flex-direction: column; gap: 5px; font-size: 0.72rem; color: var(--muted); align-items: center; }
+    input[type="color"] {
+      width: 42px; height: 30px; border: 1px solid var(--line);
+      border-radius: 7px; background: none; cursor: pointer; padding: 2px;
+    }
+
+    select.btn { padding: 8px 10px; }
+
+    .stat { display: flex; justify-content: space-between; font-size: 0.85rem; }
+    .stat span { color: var(--muted); }
+    .stat b { font-weight: 650; }
+
+    .toast {
+      position: absolute;
+      left: 50%; top: 18px; transform: translateX(-50%);
+      background: rgba(20,26,40,0.92);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 9px 16px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s;
+      backdrop-filter: blur(6px);
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+
+    .footnote { font-size: 0.76rem; color: var(--muted); line-height: 1.4; }
+
+    @media (max-width: 720px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--line); max-height: 42vh; }
+    }
   </style>
 </head>
 <body>
-  <h1>Color Click</h1>
-  <button id="circle" aria-label="Color-changing circle"></button>
-  <div class="info">
-    <span>Clicks: <b id="count">0</b></span>
-    <span>Color: <b id="colorName">blue</b></span>
+  <header>
+    <h1>Foldspace</h1>
+    <span class="tag">a virtual sheet of paper you can fold into origami</span>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="group">
+        <h2>How to fold</h2>
+        <div class="step" id="step-1"><div class="num">1</div><div>Click a point where the crease starts.</div></div>
+        <div class="step" id="step-2"><div class="num">2</div><div>Click where the crease ends. A fold line appears.</div></div>
+        <div class="step" id="step-3"><div class="num">3</div><div>Click the side you want to fold <em>over</em> the crease.</div></div>
+      </div>
+
+      <div class="group">
+        <h2>Paper</h2>
+        <div class="swatches">
+          <label class="swatch">Front<input type="color" id="frontColor" value="#d6453b" /></label>
+          <label class="swatch">Back<input type="color" id="backColor" value="#f4efe2" /></label>
+        </div>
+        <select id="presetSel" class="btn">
+          <option value="square">Square sheet</option>
+          <option value="a4">A4 rectangle</option>
+        </select>
+      </div>
+
+      <div class="group">
+        <h2>Actions</h2>
+        <div class="row">
+          <button class="btn" id="undoBtn" disabled>Undo</button>
+          <button class="btn" id="resetBtn">Reset</button>
+        </div>
+        <button class="btn" id="exportBtn">Save as PNG</button>
+      </div>
+
+      <div class="group">
+        <h2>State</h2>
+        <div class="stat"><span>Folds made</span><b id="foldCount">0</b></div>
+        <div class="stat"><span>Paper layers (max)</span><b id="layerCount">1</b></div>
+      </div>
+
+      <div class="footnote">
+        This is a real flat-folding model: the region you choose is reflected
+        across the crease, its front/back faces swap, and the layers restack in
+        the correct physical order. Try a few diagonal folds to start a crane base.
+      </div>
+    </aside>
+
+    <main class="stage">
+      <canvas id="c" width="720" height="720"></canvas>
+      <div class="toast" id="toast"></div>
+    </main>
   </div>
-  <div class="hint">Click the circle to change its color</div>
 
   <script>
-    const colors = [
-      { name: "blue",    hex: "#2f6df6" },
-      { name: "green",   hex: "#2ecc71" },
-      { name: "purple",  hex: "#9b59b6" },
-      { name: "orange",  hex: "#e67e22" },
-      { name: "red",     hex: "#e74c3c" },
-      { name: "teal",    hex: "#1abc9c" },
-      { name: "pink",    hex: "#ff6bcb" },
-      { name: "yellow",  hex: "#f1c40f" },
-    ];
+  (() => {
+    "use strict";
 
-    const circle = document.getElementById("circle");
-    const countEl = document.getElementById("count");
-    const colorNameEl = document.getElementById("colorName");
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
 
-    let count = 0;
-    let index = 0;
+    // ---- DOM ----
+    const frontColorEl = document.getElementById("frontColor");
+    const backColorEl  = document.getElementById("backColor");
+    const presetSel    = document.getElementById("presetSel");
+    const undoBtn      = document.getElementById("undoBtn");
+    const resetBtn     = document.getElementById("resetBtn");
+    const exportBtn    = document.getElementById("exportBtn");
+    const foldCountEl  = document.getElementById("foldCount");
+    const layerCountEl = document.getElementById("layerCount");
+    const toastEl      = document.getElementById("toast");
+    const steps = [null, document.getElementById("step-1"),
+                         document.getElementById("step-2"),
+                         document.getElementById("step-3")];
 
-    circle.addEventListener("click", () => {
-      // Pick a new color different from the current one
-      let next;
-      do {
-        next = Math.floor(Math.random() * colors.length);
-      } while (next === index && colors.length > 1);
-      index = next;
+    // ---- Geometry helpers ----
+    const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+    const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+    const scale = (a, s) => ({ x: a.x * s, y: a.y * s });
+    const dot = (a, b) => a.x * b.x + a.y * b.y;
 
-      const color = colors[index];
-      circle.style.background = color.hex;
-      colorNameEl.textContent = color.name;
+    // Signed value relative to the directed line through p0 with direction d.
+    // Positive on one side, negative on the other.
+    function sideOf(pt, p0, d) {
+      // normal = (-d.y, d.x)
+      return -d.y * (pt.x - p0.x) + d.x * (pt.y - p0.y);
+    }
 
-      count++;
-      countEl.textContent = count;
+    // Reflect a point across the line through p0 with unit direction u.
+    function reflect(pt, p0, u) {
+      const v = sub(pt, p0);
+      const proj = dot(v, u);
+      const onLine = add(p0, scale(u, proj));
+      return { x: 2 * onLine.x - pt.x, y: 2 * onLine.y - pt.y };
+    }
+
+    function polyArea(poly) {
+      let a = 0;
+      for (let i = 0; i < poly.length; i++) {
+        const p = poly[i], q = poly[(i + 1) % poly.length];
+        a += p.x * q.y - q.x * p.y;
+      }
+      return Math.abs(a) / 2;
+    }
+
+    // Sutherland–Hodgman clip: keep the portion of `poly` whose signed side
+    // (via sideFn) is >= 0 when keepPositive, else <= 0. Returns a polygon
+    // (possibly empty).
+    function clipHalfPlane(poly, sideFn, keepPositive) {
+      const out = [];
+      const inside = (v) => keepPositive ? sideFn(v) >= 0 : sideFn(v) <= 0;
+      for (let i = 0; i < poly.length; i++) {
+        const cur = poly[i];
+        const prev = poly[(i + poly.length - 1) % poly.length];
+        const curIn = inside(cur);
+        const prevIn = inside(prev);
+        if (curIn) {
+          if (!prevIn) out.push(intersect(prev, cur, sideFn));
+          out.push(cur);
+        } else if (prevIn) {
+          out.push(intersect(prev, cur, sideFn));
+        }
+      }
+      return out;
+    }
+
+    function intersect(a, b, sideFn) {
+      const sa = sideFn(a), sb = sideFn(b);
+      const t = sa / (sa - sb);
+      return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+    }
+
+    // ---- Paper model ----
+    // A "facet" is one flat piece of paper at some stacking height.
+    //   poly  : array of {x,y} in canvas space
+    //   front : true if the colored (front) face points toward the viewer
+    // facets[] is ordered bottom -> top.
+    let facets = [];
+    let history = [];          // stack of previous facet states for undo
+    let foldCount = 0;
+
+    function makeSheet(kind) {
+      const cx = canvas.width / 2, cy = canvas.height / 2;
+      let w, h;
+      if (kind === "a4") { w = 440; h = 440 * 1.414; }
+      else { w = 520; h = 520; }
+      h = Math.min(h, canvas.height - 120);
+      const x0 = cx - w / 2, y0 = cy - h / 2;
+      return [{
+        poly: [
+          { x: x0,     y: y0 },
+          { x: x0 + w, y: y0 },
+          { x: x0 + w, y: y0 + h },
+          { x: x0,     y: y0 + h },
+        ],
+        front: true,
+      }];
+    }
+
+    function resetPaper() {
+      facets = makeSheet(presetSel.value);
+      history = [];
+      foldCount = 0;
+      clearPending();
+      updateStats();
+      draw();
+    }
+
+    function snapshot() {
+      // Deep copy for undo.
+      return facets.map(f => ({
+        front: f.front,
+        poly: f.poly.map(p => ({ x: p.x, y: p.y })),
+      }));
+    }
+
+    // Perform a fold: crease line through a->b, folding the side that
+    // contains `target`. The selected region reflects across the crease,
+    // its faces flip, and folded pieces restack (reversed) on top.
+    function doFold(a, b, target) {
+      const d = sub(b, a);
+      const len = Math.hypot(d.x, d.y);
+      if (len < 1e-6) return false;
+      const u = { x: d.x / len, y: d.y / len };
+      const sideFn = (pt) => sideOf(pt, a, d);
+      const foldPositive = sideFn(target) >= 0; // fold the side the target is on
+
+      const stay = [];
+      const folded = [];
+
+      for (const f of facets) {
+        // Part that stays put (opposite side of the target).
+        const stayPoly = clipHalfPlane(f.poly, sideFn, !foldPositive);
+        if (polyArea(stayPoly) > 0.5) {
+          stay.push({ poly: stayPoly, front: f.front });
+        }
+        // Part that folds over (same side as the target).
+        const foldPoly = clipHalfPlane(f.poly, sideFn, foldPositive);
+        if (polyArea(foldPoly) > 0.5) {
+          const reflected = foldPoly.map(p => reflect(p, a, u));
+          folded.push({ poly: reflected, front: !f.front });
+        }
+      }
+
+      if (folded.length === 0) return false; // nothing on that side to fold
+
+      // Folding a stack inverts its order, and it lands on top of the rest.
+      folded.reverse();
+      facets = stay.concat(folded);
+      return true;
+    }
+
+    // ---- Rendering ----
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackdrop();
+
+      const frontCol = frontColorEl.value;
+      const backCol  = backColorEl.value;
+
+      for (const f of facets) {
+        ctx.save();
+        ctx.beginPath();
+        tracel(f.poly);
+        ctx.closePath();
+
+        // Soft shadow gives stacked flaps a sense of depth.
+        ctx.shadowColor = "rgba(0,0,0,0.32)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 1.5;
+        ctx.shadowOffsetY = 3;
+
+        ctx.fillStyle = f.front ? frontCol : backCol;
+        ctx.fill();
+
+        // Crisp edge on top of the fill (no shadow on the stroke).
+        ctx.shadowColor = "transparent";
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = f.front ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.18)";
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawPending();
+    }
+
+    function tracel(poly) {
+      ctx.moveTo(poly[0].x, poly[0].y);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+    }
+
+    function drawBackdrop() {
+      const step = 36;
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.035)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = step; x < canvas.width; x += step) {
+        ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, canvas.height);
+      }
+      for (let y = step; y < canvas.height; y += step) {
+        ctx.moveTo(0, y + 0.5); ctx.lineTo(canvas.width, y + 0.5);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ---- Interaction (the 3-click fold) ----
+    // pending stage: 0 = need start, 1 = need end, 2 = need fold side
+    let stage = 0;
+    let creaseA = null, creaseB = null;
+    let mouse = null;
+
+    function clearPending() {
+      stage = 0; creaseA = null; creaseB = null;
+      highlightStep(1);
+    }
+
+    function highlightStep(n) {
+      for (let i = 1; i <= 3; i++) steps[i].classList.toggle("active", i === n);
+    }
+
+    function canvasPoint(evt) {
+      const r = canvas.getBoundingClientRect();
+      const sx = canvas.width / r.width, sy = canvas.height / r.height;
+      const src = evt.touches ? evt.touches[0] : evt;
+      return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
+    }
+
+    function onClick(evt) {
+      evt.preventDefault();
+      const p = canvasPoint(evt);
+      if (stage === 0) {
+        creaseA = p; stage = 1; highlightStep(2);
+      } else if (stage === 1) {
+        if (Math.hypot(p.x - creaseA.x, p.y - creaseA.y) < 6) return; // too close
+        creaseB = p; stage = 2; highlightStep(3);
+      } else if (stage === 2) {
+        history.push(snapshot());
+        const ok = doFold(creaseA, creaseB, p);
+        if (ok) {
+          foldCount++;
+          undoBtn.disabled = false;
+          toast("Folded");
+        } else {
+          history.pop();
+          toast("Nothing on that side — click the other side");
+        }
+        clearPending();
+        updateStats();
+      }
+      draw();
+    }
+
+    function onMove(evt) {
+      mouse = canvasPoint(evt);
+      if (stage >= 1) draw();
+    }
+
+    function drawPending() {
+      // Preview the crease line and the chosen points.
+      if (stage >= 1 && creaseA) {
+        const end = (stage === 1 && mouse) ? mouse : creaseB;
+        if (end) {
+          // Extend the crease across the whole canvas for clarity.
+          const d = sub(end, creaseA);
+          const len = Math.hypot(d.x, d.y) || 1;
+          const u = { x: d.x / len, y: d.y / len };
+          const big = 2000;
+          const p1 = { x: creaseA.x - u.x * big, y: creaseA.y - u.y * big };
+          const p2 = { x: creaseA.x + u.x * big, y: creaseA.y + u.y * big };
+          ctx.save();
+          ctx.setLineDash([7, 6]);
+          ctx.strokeStyle = "rgba(110,168,254,0.9)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+          ctx.restore();
+        }
+        dot2(creaseA);
+        if (stage === 2 && creaseB) dot2(creaseB);
+      }
+      // When choosing a side, shade the side under the cursor.
+      if (stage === 2 && creaseB && mouse) {
+        const d = sub(creaseB, creaseA);
+        const sideFn = (pt) => sideOf(pt, creaseA, d);
+        const keepPos = sideFn(mouse) >= 0;
+        ctx.save();
+        ctx.fillStyle = "rgba(110,168,254,0.14)";
+        for (const f of facets) {
+          const part = clipHalfPlane(f.poly, sideFn, keepPos);
+          if (polyArea(part) > 0.5) {
+            ctx.beginPath(); tracel(part); ctx.closePath(); ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+    }
+
+    function dot2(p) {
+      ctx.save();
+      ctx.fillStyle = "#6ea8fe";
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+
+    // ---- Stats / misc ----
+    function updateStats() {
+      foldCountEl.textContent = foldCount;
+      layerCountEl.textContent = estimateMaxLayers();
+    }
+
+    // Rough max-overlap estimate: sample points and count covering facets.
+    function estimateMaxLayers() {
+      let max = 1;
+      const grid = 24;
+      for (let gx = 0; gx <= grid; gx++) {
+        for (let gy = 0; gy <= grid; gy++) {
+          const pt = { x: (gx / grid) * canvas.width, y: (gy / grid) * canvas.height };
+          let c = 0;
+          for (const f of facets) if (pointInPoly(pt, f.poly)) c++;
+          if (c > max) max = c;
+        }
+      }
+      return max;
+    }
+
+    function pointInPoly(pt, poly) {
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+        const hit = ((yi > pt.y) !== (yj > pt.y)) &&
+                    (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+        if (hit) inside = !inside;
+      }
+      return inside;
+    }
+
+    let toastTimer = null;
+    function toast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1400);
+    }
+
+    // ---- Events ----
+    canvas.addEventListener("click", onClick);
+    canvas.addEventListener("mousemove", onMove);
+    canvas.addEventListener("touchstart", onClick, { passive: false });
+    canvas.addEventListener("touchmove", (e) => { onMove(e); e.preventDefault(); }, { passive: false });
+
+    undoBtn.addEventListener("click", () => {
+      if (history.length === 0) return;
+      facets = history.pop();
+      foldCount = Math.max(0, foldCount - 1);
+      undoBtn.disabled = history.length === 0;
+      clearPending();
+      updateStats();
+      draw();
     });
+
+    resetBtn.addEventListener("click", resetPaper);
+    presetSel.addEventListener("change", resetPaper);
+    frontColorEl.addEventListener("input", draw);
+    backColorEl.addEventListener("input", draw);
+
+    exportBtn.addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.download = "origami.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault(); undoBtn.click();
+      } else if (e.key === "Escape") {
+        clearPending(); draw();
+      }
+    });
+
+    // ---- Boot ----
+    resetPaper();
+  })();
   </script>
 </body>
 </html>
