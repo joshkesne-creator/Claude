@@ -95,6 +95,9 @@
     input[type="range"] { flex: 1; accent-color: var(--accent); }
     .slider-row b { width: 38px; text-align: right; }
 
+    .check { display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--muted); cursor: pointer; }
+    .check input { accent-color: var(--accent); width: 15px; height: 15px; }
+
     .swatches { display: flex; gap: 10px; align-items: center; }
     .swatch { display: flex; flex-direction: column; gap: 5px; font-size: 0.72rem; color: var(--muted); align-items: center; }
     input[type="color"] { width: 42px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; padding: 2px; }
@@ -162,6 +165,26 @@
           <option value="square">Square sheet</option>
           <option value="a4">A4 rectangle</option>
         </select>
+      </div>
+
+      <div class="group">
+        <h2>Guides</h2>
+        <label class="check"><input type="checkbox" id="snapChk" checked /> Snap creases to grid</label>
+      </div>
+
+      <div class="group">
+        <h2>Models</h2>
+        <div class="row">
+          <button class="btn preset" data-model="half">In half</button>
+          <button class="btn preset" data-model="quarters">Quarters</button>
+          <button class="btn preset" data-model="diagonal">Diagonal</button>
+        </div>
+        <div class="row">
+          <button class="btn preset" data-model="tent">Tent</button>
+          <button class="btn preset" data-model="accordion">Accordion</button>
+          <button class="btn preset" data-model="boat">Boat base</button>
+        </div>
+        <div class="footnote">Plays a fold sequence on a fresh sheet.</div>
       </div>
 
       <div class="group">
@@ -545,6 +568,28 @@
       ectx.strokeStyle = "rgba(244,239,226,0.45)";
       ectx.lineWidth = 1.5;
       ectx.stroke();
+      ectx.restore();
+
+      // snap grid nodes
+      if (snapOn) {
+        ectx.save();
+        ectx.fillStyle = "rgba(244,239,226,0.22)";
+        const sx = sheet.w / DIV, sy = sheet.h / DIV;
+        for (let i = 0; i <= DIV; i++) {
+          for (let j = 0; j <= DIV; j++) {
+            const q = ev({ x: -hw + i * sx, y: -hh + j * sy });
+            ectx.beginPath(); ectx.arc(q.x, q.y, 1.4, 0, Math.PI * 2); ectx.fill();
+          }
+        }
+        // ring showing where the cursor will snap
+        if (mousePaper && stage < 2) {
+          const q = ev(mousePaper);
+          ectx.strokeStyle = "rgba(110,168,254,0.8)"; ectx.lineWidth = 1.5;
+          ectx.beginPath(); ectx.arc(q.x, q.y, 6, 0, Math.PI * 2); ectx.stroke();
+        }
+        ectx.restore();
+      }
+      ectx.save();
 
       // committed creases clipped to the sheet
       for (const c of creases) drawCreaseLine(c.a, c.b, c.type, false);
@@ -593,11 +638,32 @@
     function clearPending() { stage = 0; creaseA = creaseB = null; highlightStep(1); }
     function highlightStep(n) { for (let i = 1; i <= 3; i++) steps[i].classList.toggle("active", i === n); }
 
+    let snapOn = true;
+    const DIV = 8; // grid divisions per axis
+
+    // Snap a paper-space point to the nearest grid node (corners, mids,
+    // quarters, eighths) when within range — gives clean horizontal,
+    // vertical, and 45° creases.
+    function snapPoint(p) {
+      if (!snapOn) return p;
+      const hw = sheet.w / 2, hh = sheet.h / 2;
+      const sx = sheet.w / DIV, sy = sheet.h / DIV;
+      const gx = Math.round((p.x + hw) / sx) * sx - hw;
+      const gy = Math.round((p.y + hh) / sy) * sy - hh;
+      const thr = 0.5 * Math.min(sx, sy);
+      if (Math.hypot(p.x - gx, p.y - gy) <= thr &&
+          gx >= -hw - 1e-6 && gx <= hw + 1e-6 && gy >= -hh - 1e-6 && gy <= hh + 1e-6) {
+        return { x: gx, y: gy };
+      }
+      return p;
+    }
+
     function editorPoint(evt) {
       const r = editor.getBoundingClientRect();
       const sx = editor.width / r.width, sy = editor.height / r.height;
       const src = evt.touches ? evt.touches[0] : evt;
-      return evInv({ x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy });
+      const raw = evInv({ x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy });
+      return snapPoint(raw);
     }
 
     function onEditorClick(evt) {
@@ -621,7 +687,7 @@
 
     function onEditorMove(evt) {
       mousePaper = editorPoint(evt);
-      if (stage >= 1) renderEditor();
+      if (stage >= 1 || snapOn) renderEditor();
     }
 
     function drawPending() {
@@ -658,7 +724,7 @@
     }
 
     // ===================== Fold animation =====================
-    function animateFold(pending) {
+    function animateFold(pending, onDone, quiet) {
       animating = true;
       const dur = 480;
       const start = performance.now();
@@ -675,10 +741,62 @@
           animating = false;
           updateStats();
           render();
-          toast(pending.type === "valley" ? "Valley fold" : "Mountain fold");
+          if (!quiet) toast(pending.type === "valley" ? "Valley fold" : "Mountain fold");
+          if (onDone) onDone();
         }
       }
       requestAnimationFrame(frame);
+    }
+
+    // ===================== Preset model sequences =====================
+    // Each step is defined in fractions of the sheet so it scales with size.
+    // u/v are in [-0.5, 0.5] across width/height.
+    function P(u, v) { return { x: u * sheet.w, y: v * sheet.h }; }
+
+    const MODELS = {
+      half: [
+        { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180 },
+      ],
+      quarters: [
+        { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180 },
+        { a: [-0.25, -0.5], b: [-0.25, 0.5], side: [-0.4, 0], type: "valley", angle: 180 },
+      ],
+      diagonal: [
+        { a: [-0.5, -0.5], b: [0.5, 0.5], side: [0.4, -0.2], type: "valley", angle: 180 },
+      ],
+      tent: [
+        { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 95 },
+      ],
+      accordion: [
+        { a: [-0.25, -0.5], b: [-0.25, 0.5], side: [0, 0], type: "valley", angle: 115 },
+        { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "mountain", angle: 115 },
+        { a: [0.25, -0.5], b: [0.25, 0.5], side: [0.4, 0], type: "valley", angle: 115 },
+      ],
+      boat: [
+        { a: [-0.5, -0.25], b: [0.5, -0.25], side: [0, -0.4], type: "valley", angle: 150 },
+        { a: [-0.5, 0.25], b: [0.5, 0.25], side: [0, 0.4], type: "valley", angle: 150 },
+        { a: [-0.25, -0.5], b: [-0.25, 0.5], side: [-0.4, 0], type: "mountain", angle: 110 },
+        { a: [0.25, -0.5], b: [0.25, 0.5], side: [0.4, 0], type: "mountain", angle: 110 },
+      ],
+    };
+
+    function playModel(name) {
+      if (animating) return;
+      const seq = MODELS[name];
+      if (!seq) return;
+      resetPaper();
+      let i = 0;
+      function next() {
+        if (i >= seq.length) { toast("Done: " + name); return; }
+        const s = seq[i++];
+        const a = P(s.a[0], s.a[1]), b = P(s.b[0], s.b[1]), side = P(s.side[0], s.side[1]);
+        const pending = buildFold(a, b, side, s.type, s.angle);
+        if (!pending) { next(); return; }      // skip a step that no longer cuts paper
+        history.push(snapshot());
+        undoBtn.disabled = false;
+        animateFold(pending, next, true);
+      }
+      next();
     }
 
     // ===================== 3D orbit =====================
@@ -731,6 +849,14 @@
       renderEditor();
     });
     angleEl.addEventListener("input", () => { angleValEl.textContent = angleEl.value + "°"; });
+
+    document.getElementById("snapChk").addEventListener("change", (e) => {
+      snapOn = e.target.checked; renderEditor();
+    });
+
+    document.querySelectorAll("button.preset").forEach(btn => {
+      btn.addEventListener("click", () => playModel(btn.dataset.model));
+    });
 
     undoBtn.addEventListener("click", () => {
       if (animating || history.length === 0) return;
