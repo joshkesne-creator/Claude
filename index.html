@@ -162,6 +162,17 @@
             <option value="3">Top 3</option>
           </select>
         </div>
+        <div class="slider-row">
+          <span>Style</span>
+          <select id="styleSel" class="btn" style="flex:1">
+            <option value="simple">Simple fold</option>
+            <option value="reverse">Reverse fold</option>
+          </select>
+        </div>
+        <div class="footnote" id="styleHint" style="display:none">
+          Reverse fold: the tip nests into the flap. Valley = tuck inside,
+          mountain = wrap outside. Define the crease across a folded flap.
+        </div>
       </div>
 
       <div class="group">
@@ -195,6 +206,7 @@
         </div>
         <div class="row">
           <button class="btn preset" data-model="flap">Top-flap demo</button>
+          <button class="btn preset" data-model="reverse">Reverse-fold demo</button>
         </div>
         <div class="footnote">Plays a fold sequence on a fresh sheet. The flap demo uses a top-layer fold.</div>
       </div>
@@ -278,6 +290,7 @@
 
     let foldType = "valley";
     let layerMode = "all";
+    let foldStyle = "simple";
 
     // ===================== vec / matrix math =====================
     const v3 = (x, y, z) => ({ x, y, z });
@@ -417,8 +430,13 @@
 
     // ---- Build a fold: returns the pending fold (or null) ----
     // layers: "all" | "1" | "2" | "3"  -> fold all, or only the top-K
-    // stacking generations among the facets on the fold side.
-    function buildFold(a, b, target, type, angleDeg, layers) {
+    // style:  "simple"  -> normal valley/mountain (reverse-and-stack ordering)
+    //         "reverse" -> reverse fold: same geometry, but each moved tip
+    //                      nests adjacent to its origin layer instead of
+    //                      stacking on top. type picks inside (valley) vs
+    //                      outside (mountain) of the origin.
+    function buildFold(a, b, target, type, angleDeg, layers, style) {
+      style = style || "simple";
       const d = sub2(b, a);
       if (Math.hypot(d.x, d.y) < 1e-6) return null;
       const sideFn = (pt) => sideOf(pt, a, d);
@@ -457,30 +475,40 @@
       }
       if (move.length === 0) return null;
 
-      // Decide rotation sign so that "valley" lifts the moving flap toward +Z.
+      // Rotation sign. Simple: valley lifts toward +Z. Reverse: lift the tip
+      // up and over (geometry is identical at a full 180° fold either way).
       const rep = move.reduce((m, c) => polyArea(c.poly2d) > polyArea(m.poly2d) ? c : m, move[0]);
       const c0 = applyT(rep.T, v3(rep.centroid2d.x, rep.centroid2d.y, 0));
       const test = applyT(rotAboutLine(rep.P, rep.k, 0.1), c0);
       const upSign = (test.z >= c0.z) ? 1 : -1;
-      const sign = (type === "valley") ? upSign : -upSign;
+      const sign = (style === "reverse") ? upSign : ((type === "valley") ? upSign : -upSign);
 
-      // Geometric layer ordering (reverse-and-stack). The moving layers
-      // flip as a group, so their relative stacking REVERSES; the group
-      // then lands above the whole pile (valley) or tucks beneath it
-      // (mountain). order is a true pile rank: higher = physically higher.
-      const stacks = facets.map(f => f.order);
-      const maxS = Math.max(...stacks), minS = Math.min(...stacks);
-      const movedBottomUp = move.slice().sort((p, q) => p.src - q.src).reverse();
-      const n = movedBottomUp.length;
-      movedBottomUp.forEach((m, i) => {
-        m.order = (type === "valley") ? (maxS + 1 + i) : (minS - n + i);
-      });
+      // ---- Layer ordering ----
+      if (style === "reverse") {
+        // Each moved tip tucks immediately beside its origin layer (which
+        // keeps order = src): inside (valley) goes just under, outside
+        // (mountain) just over. This interleaves the tip into the flap.
+        const off = (type === "mountain") ? 0.5 : -0.5;
+        move.forEach(m => { m.order = m.src + off; });
+      } else {
+        // Reverse-and-stack: moved layers flip as a group (order reverses)
+        // and land above the pile (valley) or beneath it (mountain).
+        const stacks = facets.map(f => f.order);
+        const maxS = Math.max(...stacks), minS = Math.min(...stacks);
+        const movedBottomUp = move.slice().sort((p, q) => p.src - q.src).reverse();
+        const n = movedBottomUp.length;
+        movedBottomUp.forEach((m, i) => {
+          m.order = (type === "valley") ? (maxS + 1 + i) : (minS - n + i);
+        });
+      }
+      // Renormalize every facet to a dense integer pile rank.
+      stay.concat(move).sort((x, y) => x.order - y.order).forEach((it, i) => { it.order = i; });
 
       return {
         stay, move, sign,
         target: (angleDeg * Math.PI) / 180,
         type, crease: { a: { ...a }, b: { ...b }, type },
-        layers: layers || "all",
+        layers: layers || "all", style,
         movedGens: new Set(move.map(m => m.src)).size,
       };
     }
@@ -729,10 +757,10 @@
         creaseB = p; stage = 2; highlightStep(3);
       } else if (stage === 2) {
         const angle = +angleEl.value;
-        const pending = buildFold(creaseA, creaseB, p, foldType, angle, layerMode);
+        const pending = buildFold(creaseA, creaseB, p, foldType, angle, layerMode, foldStyle);
         if (!pending) { toast("Nothing on that side — try the other side"); clearPending(); renderEditor(); return; }
         history.push(snapshot());
-        foldLog.push({ a: { ...creaseA }, b: { ...creaseB }, side: { ...p }, type: foldType, angle, layers: layerMode });
+        foldLog.push({ a: { ...creaseA }, b: { ...creaseB }, side: { ...p }, type: foldType, angle, layers: layerMode, style: foldStyle });
         undoBtn.disabled = false;
         animateFold(pending);
         clearPending();
@@ -841,6 +869,12 @@
         { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
         { a: [0.25, -0.5], b: [0.25, 0.5], side: [0.4, 0], type: "valley", angle: 150, layers: "1" },
       ],
+      // Reverse-fold demo: make a 2-layer flap, then reverse-fold its tip so
+      // it tucks inside instead of stacking on top.
+      reverse: [
+        { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
+        { a: [-0.5, -0.25], b: [0.5, -0.25], side: [0, -0.4], type: "valley", angle: 180, layers: "all", style: "reverse" },
+      ],
     };
 
     // Run a list of folds (absolute paper coords). animated=true plays them
@@ -853,10 +887,10 @@
       function step() {
         if (i >= entries.length) { done(); return; }
         const s = entries[i++];
-        const pending = buildFold(s.a, s.b, s.side, s.type, s.angle, s.layers || "all");
+        const pending = buildFold(s.a, s.b, s.side, s.type, s.angle, s.layers || "all", s.style || "simple");
         if (!pending) { step(); return; }     // skip a step that no longer cuts paper
         history.push(snapshot());
-        foldLog.push({ a: { ...s.a }, b: { ...s.b }, side: { ...s.side }, type: s.type, angle: s.angle, layers: s.layers || "all" });
+        foldLog.push({ a: { ...s.a }, b: { ...s.b }, side: { ...s.side }, type: s.type, angle: s.angle, layers: s.layers || "all", style: s.style || "simple" });
         undoBtn.disabled = false;
         if (animated) { animateFold(pending, step, true); }
         else {
@@ -873,7 +907,7 @@
       resetPaper();
       const entries = seq.map(s => ({
         a: P(s.a[0], s.a[1]), b: P(s.b[0], s.b[1]), side: P(s.side[0], s.side[1]),
-        type: s.type, angle: s.angle, layers: s.layers || "all",
+        type: s.type, angle: s.angle, layers: s.layers || "all", style: s.style || "simple",
       }));
       runFoldSequence(entries, true, () => toast("Done: " + name));
     }
@@ -929,6 +963,10 @@
     });
     angleEl.addEventListener("input", () => { angleValEl.textContent = angleEl.value + "°"; });
     document.getElementById("layerSel").addEventListener("change", (e) => { layerMode = e.target.value; });
+    document.getElementById("styleSel").addEventListener("change", (e) => {
+      foldStyle = e.target.value;
+      document.getElementById("styleHint").style.display = foldStyle === "reverse" ? "" : "none";
+    });
 
     document.getElementById("snapChk").addEventListener("change", (e) => {
       snapOn = e.target.checked; renderEditor();
