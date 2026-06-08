@@ -979,11 +979,12 @@
         { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
         { a: [-0.5, -0.25], b: [0.5, -0.25], side: [0, -0.4], type: "valley", angle: 180, layers: "all", style: "reverse" },
       ],
-      // Open-flap demo: make a 2-layer flap, then lift the top layer about its
-      // spine (the central fold) so the pocket opens and the layer below shows.
+      // Open-flap demo: fold into a 4-layer booklet, then lift just the top
+      // page about its spine so the layered pocket opens and you see inside.
       squash: [
         { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
-        { a: [-0.5, -0.5], b: [-0.5, 0.5], side: [-0.25, 0], type: "valley", angle: 75, layers: "1", style: "squash" },
+        { a: [-0.5, 0], b: [0.5, 0], side: [0, 0.25], type: "valley", angle: 180, layers: "all" },
+        { a: [-0.5, -0.5], b: [-0.5, 0.5], side: [-0.4, -0.1], type: "valley", angle: 80, layers: "1", style: "squash" },
       ],
     };
 
