@@ -153,6 +153,15 @@
           <input type="range" id="angle" min="0" max="180" value="180" />
           <b id="angleVal">180°</b>
         </div>
+        <div class="slider-row">
+          <span>Layers</span>
+          <select id="layerSel" class="btn" style="flex:1">
+            <option value="all">All layers</option>
+            <option value="1">Top 1 (top flap)</option>
+            <option value="2">Top 2</option>
+            <option value="3">Top 3</option>
+          </select>
+        </div>
       </div>
 
       <div class="group">
@@ -184,7 +193,10 @@
           <button class="btn preset" data-model="accordion">Accordion</button>
           <button class="btn preset" data-model="boat">Boat base</button>
         </div>
-        <div class="footnote">Plays a fold sequence on a fresh sheet.</div>
+        <div class="row">
+          <button class="btn preset" data-model="flap">Top-flap demo</button>
+        </div>
+        <div class="footnote">Plays a fold sequence on a fresh sheet. The flap demo uses a top-layer fold.</div>
       </div>
 
       <div class="group">
@@ -203,9 +215,10 @@
       </div>
 
       <div class="footnote">
-        Drag the 3D view to orbit. Folds are defined on the flat sheet and fold
-        through all layers. <b>Valley</b> bends the crease toward you; <b>mountain</b>
-        bends it away. Lower the angle for partial folds (tents, boats, fins).
+        Drag the 3D view to orbit. <b>Valley</b> bends the crease toward you;
+        <b>mountain</b> bends it away. Lower the angle for partial folds. Set
+        <b>Layers → Top 1</b> to fold just the top flap and leave the layers
+        beneath in place.
       </div>
     </aside>
 
@@ -258,6 +271,7 @@
                          document.getElementById("step-3")];
 
     let foldType = "valley";
+    let layerMode = "all";
 
     // ===================== vec / matrix math =====================
     const v3 = (x, y, z) => ({ x, y, z });
@@ -350,7 +364,8 @@
     let creases = [];     // committed crease lines for the editor display: {a,b,type}
     let history = [];     // undo stack
     let foldCount = 0;
-    let nextOrder = 1;
+    let nextUp = 1;       // stacking order for valley flaps (push up)
+    let nextDown = -1;    // stacking order for mountain flaps (push down)
     let sheet = { w: 0, h: 0 };
 
     function makeSheet(kind) {
@@ -370,7 +385,7 @@
 
     function resetPaper() {
       facets = makeSheet(presetSel.value);
-      creases = []; history = []; foldCount = 0; nextOrder = 1;
+      creases = []; history = []; foldCount = 0; nextUp = 1; nextDown = -1;
       clearPending(); updateStats(); render();
     }
 
@@ -382,7 +397,7 @@
           order: f.order,
         })),
         creases: creases.map(c => ({ a: { ...c.a }, b: { ...c.b }, type: c.type })),
-        foldCount, nextOrder,
+        foldCount, nextUp, nextDown,
       };
     }
     function restore(s) {
@@ -392,18 +407,38 @@
         order: f.order,
       }));
       creases = s.creases.map(c => ({ a: { ...c.a }, b: { ...c.b }, type: c.type }));
-      foldCount = s.foldCount; nextOrder = s.nextOrder;
+      foldCount = s.foldCount; nextUp = s.nextUp; nextDown = s.nextDown;
     }
 
     // ---- Build a fold: returns the pending fold (or null) ----
-    function buildFold(a, b, target, type, angleDeg) {
+    // layers: "all" | "1" | "2" | "3"  -> fold all, or only the top-K
+    // stacking generations among the facets on the fold side.
+    function buildFold(a, b, target, type, angleDeg, layers) {
       const d = sub2(b, a);
       if (Math.hypot(d.x, d.y) < 1e-6) return null;
       const sideFn = (pt) => sideOf(pt, a, d);
       const foldPositive = sideFn(target) >= 0;
 
+      // Facets with real area on the fold side are candidate layers.
+      const onFold = facets.filter(f =>
+        polyArea(clipHalfPlane(f.poly2d, sideFn, foldPositive)) > 0.5);
+      if (onFold.length === 0) return null;
+
+      // Choose which facets actually move. Higher order = higher in the
+      // stack; "top K" keeps the K highest distinct order generations.
+      let selected;
+      if (!layers || layers === "all") {
+        selected = new Set(onFold);
+      } else {
+        const k = parseInt(layers, 10);
+        const gens = [...new Set(onFold.map(f => f.order))].sort((x, y) => y - x);
+        const keep = new Set(gens.slice(0, k));
+        selected = new Set(onFold.filter(f => keep.has(f.order)));
+      }
+
       const stay = [], move = [];
       for (const f of facets) {
+        if (!selected.has(f)) { stay.push({ poly2d: f.poly2d, T: f.T, order: f.order }); continue; }
         const stayPoly = clipHalfPlane(f.poly2d, sideFn, !foldPositive);
         if (polyArea(stayPoly) > 0.5) stay.push({ poly2d: stayPoly, T: f.T, order: f.order });
 
@@ -424,11 +459,17 @@
       const upSign = (test.z >= c0.z) ? 1 : -1;
       const sign = (type === "valley") ? upSign : -upSign;
 
+      // Valley flaps stack on top (rising order); mountain flaps tuck
+      // underneath (falling order), matching the physical pile.
+      const newOrder = (type === "valley") ? nextUp++ : nextDown--;
+
       return {
         stay, move, sign,
         target: (angleDeg * Math.PI) / 180,
         type, crease: { a: { ...a }, b: { ...b }, type },
-        order: nextOrder++,
+        order: newOrder,
+        layers: layers || "all",
+        movedGens: new Set(move.map(m => m.order)).size,
       };
     }
 
@@ -675,7 +716,7 @@
         if (Math.hypot(p.x - creaseA.x, p.y - creaseA.y) < 5) return;
         creaseB = p; stage = 2; highlightStep(3);
       } else if (stage === 2) {
-        const pending = buildFold(creaseA, creaseB, p, foldType, +angleEl.value);
+        const pending = buildFold(creaseA, creaseB, p, foldType, +angleEl.value, layerMode);
         if (!pending) { toast("Nothing on that side — try the other side"); clearPending(); renderEditor(); return; }
         history.push(snapshot());
         undoBtn.disabled = false;
@@ -741,7 +782,10 @@
           animating = false;
           updateStats();
           render();
-          if (!quiet) toast(pending.type === "valley" ? "Valley fold" : "Mountain fold");
+          if (!quiet) {
+            const base = pending.type === "valley" ? "Valley fold" : "Mountain fold";
+            toast(pending.layers === "all" ? base : base + " · top " + pending.layers);
+          }
           if (onDone) onDone();
         }
       }
@@ -778,6 +822,11 @@
         { a: [-0.25, -0.5], b: [-0.25, 0.5], side: [-0.4, 0], type: "mountain", angle: 110 },
         { a: [0.25, -0.5], b: [0.25, 0.5], side: [0.4, 0], type: "mountain", angle: 110 },
       ],
+      // Layer-aware demo: fold flat, then peel back only the top flap.
+      flap: [
+        { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
+        { a: [0.25, -0.5], b: [0.25, 0.5], side: [0.4, 0], type: "valley", angle: 150, layers: "1" },
+      ],
     };
 
     function playModel(name) {
@@ -790,7 +839,7 @@
         if (i >= seq.length) { toast("Done: " + name); return; }
         const s = seq[i++];
         const a = P(s.a[0], s.a[1]), b = P(s.b[0], s.b[1]), side = P(s.side[0], s.side[1]);
-        const pending = buildFold(a, b, side, s.type, s.angle);
+        const pending = buildFold(a, b, side, s.type, s.angle, s.layers || "all");
         if (!pending) { next(); return; }      // skip a step that no longer cuts paper
         history.push(snapshot());
         undoBtn.disabled = false;
@@ -849,6 +898,7 @@
       renderEditor();
     });
     angleEl.addEventListener("input", () => { angleValEl.textContent = angleEl.value + "°"; });
+    document.getElementById("layerSel").addEventListener("change", (e) => { layerMode = e.target.value; });
 
     document.getElementById("snapChk").addEventListener("change", (e) => {
       snapOn = e.target.checked; renderEditor();
