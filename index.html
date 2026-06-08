@@ -204,8 +204,14 @@
         <div class="row">
           <button class="btn" id="undoBtn" disabled>Undo</button>
           <button class="btn" id="resetBtn">Reset</button>
+          <button class="btn" id="replayBtn">Replay</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="saveBtn">Save folds</button>
+          <button class="btn" id="loadBtn">Load folds</button>
         </div>
         <button class="btn" id="exportBtn">Save 3D as PNG</button>
+        <input type="file" id="loadInput" accept="application/json,.json" style="display:none" />
       </div>
 
       <div class="group">
@@ -363,6 +369,7 @@
     let facets = [];
     let creases = [];     // committed crease lines for the editor display: {a,b,type}
     let history = [];     // undo stack
+    let foldLog = [];     // replayable record of every committed fold
     let foldCount = 0;
     let sheet = { w: 0, h: 0 };
 
@@ -383,7 +390,7 @@
 
     function resetPaper() {
       facets = makeSheet(presetSel.value);
-      creases = []; history = []; foldCount = 0;
+      creases = []; history = []; foldLog = []; foldCount = 0;
       clearPending(); updateStats(); render();
     }
 
@@ -721,9 +728,11 @@
         if (Math.hypot(p.x - creaseA.x, p.y - creaseA.y) < 5) return;
         creaseB = p; stage = 2; highlightStep(3);
       } else if (stage === 2) {
-        const pending = buildFold(creaseA, creaseB, p, foldType, +angleEl.value, layerMode);
+        const angle = +angleEl.value;
+        const pending = buildFold(creaseA, creaseB, p, foldType, angle, layerMode);
         if (!pending) { toast("Nothing on that side — try the other side"); clearPending(); renderEditor(); return; }
         history.push(snapshot());
+        foldLog.push({ a: { ...creaseA }, b: { ...creaseB }, side: { ...p }, type: foldType, angle, layers: layerMode });
         undoBtn.disabled = false;
         animateFold(pending);
         clearPending();
@@ -834,23 +843,39 @@
       ],
     };
 
-    function playModel(name) {
+    // Run a list of folds (absolute paper coords). animated=true plays them
+    // one at a time; false rebuilds instantly. Each fold is logged so the
+    // result can itself be saved/replayed. Reused by presets, load & replay.
+    function runFoldSequence(entries, animated, onDone) {
       if (animating) return;
-      const seq = MODELS[name];
-      if (!seq) return;
-      resetPaper();
       let i = 0;
-      function next() {
-        if (i >= seq.length) { toast("Done: " + name); return; }
-        const s = seq[i++];
-        const a = P(s.a[0], s.a[1]), b = P(s.b[0], s.b[1]), side = P(s.side[0], s.side[1]);
-        const pending = buildFold(a, b, side, s.type, s.angle, s.layers || "all");
-        if (!pending) { next(); return; }      // skip a step that no longer cuts paper
+      function done() { render(); if (onDone) onDone(); }
+      function step() {
+        if (i >= entries.length) { done(); return; }
+        const s = entries[i++];
+        const pending = buildFold(s.a, s.b, s.side, s.type, s.angle, s.layers || "all");
+        if (!pending) { step(); return; }     // skip a step that no longer cuts paper
         history.push(snapshot());
+        foldLog.push({ a: { ...s.a }, b: { ...s.b }, side: { ...s.side }, type: s.type, angle: s.angle, layers: s.layers || "all" });
         undoBtn.disabled = false;
-        animateFold(pending, next, true);
+        if (animated) { animateFold(pending, step, true); }
+        else {
+          facets = facetsForAngle(pending, pending.target);
+          creases.push(pending.crease); foldCount++; updateStats(); step();
+        }
       }
-      next();
+      step();
+    }
+
+    function playModel(name) {
+      const seq = MODELS[name];
+      if (!seq || animating) return;
+      resetPaper();
+      const entries = seq.map(s => ({
+        a: P(s.a[0], s.a[1]), b: P(s.b[0], s.b[1]), side: P(s.side[0], s.side[1]),
+        type: s.type, angle: s.angle, layers: s.layers || "all",
+      }));
+      runFoldSequence(entries, true, () => toast("Done: " + name));
     }
 
     // ===================== 3D orbit =====================
@@ -916,6 +941,7 @@
     undoBtn.addEventListener("click", () => {
       if (animating || history.length === 0) return;
       restore(history.pop());
+      foldLog.pop();
       undoBtn.disabled = history.length === 0;
       clearPending(); updateStats(); render();
     });
@@ -929,6 +955,46 @@
       link.download = "origami-3d.png";
       link.href = view.toDataURL("image/png");
       link.click();
+    });
+
+    // ---- Save / Load / Replay a fold sequence ----
+    document.getElementById("saveBtn").addEventListener("click", () => {
+      if (foldLog.length === 0) { toast("Nothing to save yet"); return; }
+      const data = JSON.stringify({ version: 1, preset: presetSel.value, folds: foldLog }, null, 2);
+      const blob = new Blob([data], { type: "application/json" });
+      const link = document.createElement("a");
+      link.download = "origami-folds.json";
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+
+    const loadInput = document.getElementById("loadInput");
+    document.getElementById("loadBtn").addEventListener("click", () => { if (!animating) loadInput.click(); });
+    loadInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const obj = JSON.parse(reader.result);
+          if (!obj || !Array.isArray(obj.folds)) throw new Error("bad file");
+          if (obj.preset && (obj.preset === "square" || obj.preset === "a4")) presetSel.value = obj.preset;
+          resetPaper();
+          runFoldSequence(obj.folds, false, () => toast("Loaded " + obj.folds.length + " folds"));
+        } catch (err) {
+          toast("Couldn't read that file");
+        }
+      };
+      reader.readAsText(file);
+      loadInput.value = "";
+    });
+
+    document.getElementById("replayBtn").addEventListener("click", () => {
+      if (animating || foldLog.length === 0) return;
+      const log = foldLog.slice();
+      resetPaper();
+      runFoldSequence(log, true, () => toast("Replay done"));
     });
 
     window.addEventListener("keydown", (e) => {
