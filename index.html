@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Foldspace — Virtual Origami Paper</title>
+  <title>Foldspace — Virtual Origami Paper (3D)</title>
   <style>
     :root {
       --bg: #11151f;
@@ -13,6 +13,8 @@
       --muted: #95a0b8;
       --accent: #6ea8fe;
       --accent-strong: #4a89f5;
+      --valley: #6ea8fe;
+      --mountain: #ef6f6f;
       --line: #2e384e;
     }
     * { box-sizing: border-box; }
@@ -27,103 +29,75 @@
       min-height: 100vh;
     }
     header {
-      padding: 16px 22px;
-      display: flex;
-      align-items: baseline;
-      gap: 14px;
+      padding: 14px 22px;
+      display: flex; align-items: baseline; gap: 14px;
       border-bottom: 1px solid var(--line);
     }
     header h1 { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: 0.3px; }
     header .tag { color: var(--muted); font-size: 0.85rem; }
 
-    .layout {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 300px 1fr;
-      min-height: 0;
-    }
+    .layout { flex: 1; display: grid; grid-template-columns: 290px 1fr; min-height: 0; }
     .sidebar {
       border-right: 1px solid var(--line);
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      overflow-y: auto;
+      padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;
     }
     .stage {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+      gap: 16px; padding: 18px; min-width: 0; min-height: 0;
     }
+    .panel3d, .panel2d { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+    .panel-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); font-weight: 700; }
+    .canvas-wrap { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
     canvas {
-      background: #0c0f17;
-      border-radius: 14px;
-      box-shadow: 0 24px 60px rgba(0,0,0,0.5), inset 0 0 0 1px var(--line);
-      touch-action: none;
-      cursor: crosshair;
-      max-width: 100%;
-      max-height: 100%;
+      background: #0c0f17; border-radius: 14px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px var(--line);
+      touch-action: none; max-width: 100%; max-height: 100%;
     }
+    #editor { cursor: crosshair; }
+    #view3d { cursor: grab; }
+    #view3d:active { cursor: grabbing; }
 
     .group { display: flex; flex-direction: column; gap: 8px; }
-    .group h2 {
-      margin: 0;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-      color: var(--muted);
-      font-weight: 700;
-    }
+    .group h2 { margin: 0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); font-weight: 700; }
 
-    .step {
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-      font-size: 0.86rem;
-      color: var(--muted);
-      line-height: 1.35;
-    }
+    .step { display: flex; gap: 10px; align-items: flex-start; font-size: 0.84rem; color: var(--muted); line-height: 1.35; }
     .step .num {
-      flex: 0 0 auto;
-      width: 20px; height: 20px;
-      border-radius: 50%;
-      display: grid; place-items: center;
-      font-size: 0.72rem; font-weight: 700;
-      background: var(--panel-2);
-      color: var(--text);
-      border: 1px solid var(--line);
-      transition: background 0.2s, color 0.2s, border-color 0.2s;
+      flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+      display: grid; place-items: center; font-size: 0.72rem; font-weight: 700;
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      transition: background .2s, color .2s, border-color .2s;
     }
     .step.active .num { background: var(--accent-strong); color: #fff; border-color: var(--accent); }
     .step.active { color: var(--text); }
 
     button.btn {
-      appearance: none;
-      border: 1px solid var(--line);
-      background: var(--panel-2);
-      color: var(--text);
-      padding: 9px 12px;
-      border-radius: 9px;
-      font-size: 0.88rem;
-      cursor: pointer;
-      transition: background 0.15s, transform 0.05s, border-color 0.15s;
+      appearance: none; border: 1px solid var(--line); background: var(--panel-2);
+      color: var(--text); padding: 9px 12px; border-radius: 9px; font-size: 0.88rem;
+      cursor: pointer; transition: background .15s, transform .05s, border-color .15s;
     }
     button.btn:hover { background: #2b3550; border-color: #3a486a; }
     button.btn:active { transform: translateY(1px); }
-    button.btn:disabled { opacity: 0.4; cursor: default; }
+    button.btn:disabled { opacity: .4; cursor: default; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row .btn { flex: 1; }
 
+    .toggle { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+    .toggle button {
+      flex: 1; appearance: none; border: none; background: var(--panel-2); color: var(--muted);
+      padding: 9px 8px; font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: background .15s, color .15s;
+    }
+    .toggle button .mark { font-family: monospace; opacity: .8; }
+    .toggle button.on[data-type="valley"]   { background: rgba(110,168,254,0.22); color: #cfe0ff; box-shadow: inset 0 -2px 0 var(--valley); }
+    .toggle button.on[data-type="mountain"] { background: rgba(239,111,111,0.20); color: #ffd9d9; box-shadow: inset 0 -2px 0 var(--mountain); }
+
+    .slider-row { display: flex; align-items: center; gap: 10px; font-size: 0.84rem; }
+    input[type="range"] { flex: 1; accent-color: var(--accent); }
+    .slider-row b { width: 38px; text-align: right; }
+
     .swatches { display: flex; gap: 10px; align-items: center; }
     .swatch { display: flex; flex-direction: column; gap: 5px; font-size: 0.72rem; color: var(--muted); align-items: center; }
-    input[type="color"] {
-      width: 42px; height: 30px; border: 1px solid var(--line);
-      border-radius: 7px; background: none; cursor: pointer; padding: 2px;
-    }
-
+    input[type="color"] { width: 42px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; padding: 2px; }
     select.btn { padding: 8px 10px; }
 
     .stat { display: flex; justify-content: space-between; font-size: 0.85rem; }
@@ -131,43 +105,51 @@
     .stat b { font-weight: 650; }
 
     .toast {
-      position: absolute;
-      left: 50%; top: 18px; transform: translateX(-50%);
-      background: rgba(20,26,40,0.92);
-      border: 1px solid var(--line);
-      color: var(--text);
-      padding: 9px 16px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.25s;
-      backdrop-filter: blur(6px);
-      white-space: nowrap;
+      position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+      background: rgba(20,26,40,0.92); border: 1px solid var(--line); color: var(--text);
+      padding: 8px 15px; border-radius: 999px; font-size: 0.82rem; pointer-events: none;
+      opacity: 0; transition: opacity .25s; backdrop-filter: blur(6px); white-space: nowrap;
     }
     .toast.show { opacity: 1; }
-
     .footnote { font-size: 0.76rem; color: var(--muted); line-height: 1.4; }
+    .legend { display: flex; gap: 14px; font-size: 0.76rem; color: var(--muted); }
+    .legend i { display: inline-block; width: 22px; height: 0; vertical-align: middle; margin-right: 6px; }
+    .legend .valley i { border-top: 2px dashed var(--valley); }
+    .legend .mountain i { border-top: 2px dashed var(--mountain); }
 
-    @media (max-width: 720px) {
+    @media (max-width: 860px) {
       .layout { grid-template-columns: 1fr; }
-      .sidebar { border-right: none; border-bottom: 1px solid var(--line); max-height: 42vh; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+      .stage { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <header>
     <h1>Foldspace</h1>
-    <span class="tag">a virtual sheet of paper you can fold into origami</span>
+    <span class="tag">fold a virtual sheet of paper — now in 3D</span>
   </header>
 
   <div class="layout">
     <aside class="sidebar">
       <div class="group">
         <h2>How to fold</h2>
-        <div class="step" id="step-1"><div class="num">1</div><div>Click a point where the crease starts.</div></div>
-        <div class="step" id="step-2"><div class="num">2</div><div>Click where the crease ends. A fold line appears.</div></div>
-        <div class="step" id="step-3"><div class="num">3</div><div>Click the side you want to fold <em>over</em> the crease.</div></div>
+        <div class="step" id="step-1"><div class="num">1</div><div>On the <b>crease editor</b>, click where the crease starts.</div></div>
+        <div class="step" id="step-2"><div class="num">2</div><div>Click where the crease ends.</div></div>
+        <div class="step" id="step-3"><div class="num">3</div><div>Click the side to fold. Watch it move in 3D.</div></div>
+      </div>
+
+      <div class="group">
+        <h2>Fold type</h2>
+        <div class="toggle" id="typeToggle">
+          <button data-type="valley" class="on">Valley <span class="mark">∨</span></button>
+          <button data-type="mountain">Mountain <span class="mark">∧</span></button>
+        </div>
+        <div class="slider-row">
+          <span>Angle</span>
+          <input type="range" id="angle" min="0" max="180" value="180" />
+          <b id="angleVal">180°</b>
+        </div>
       </div>
 
       <div class="group">
@@ -188,25 +170,41 @@
           <button class="btn" id="undoBtn" disabled>Undo</button>
           <button class="btn" id="resetBtn">Reset</button>
         </div>
-        <button class="btn" id="exportBtn">Save as PNG</button>
+        <button class="btn" id="exportBtn">Save 3D as PNG</button>
       </div>
 
       <div class="group">
         <h2>State</h2>
         <div class="stat"><span>Folds made</span><b id="foldCount">0</b></div>
-        <div class="stat"><span>Paper layers (max)</span><b id="layerCount">1</b></div>
+        <div class="stat"><span>Facets</span><b id="facetCount">1</b></div>
       </div>
 
       <div class="footnote">
-        This is a real flat-folding model: the region you choose is reflected
-        across the crease, its front/back faces swap, and the layers restack in
-        the correct physical order. Try a few diagonal folds to start a crane base.
+        Drag the 3D view to orbit. Folds are defined on the flat sheet and fold
+        through all layers. <b>Valley</b> bends the crease toward you; <b>mountain</b>
+        bends it away. Lower the angle for partial folds (tents, boats, fins).
       </div>
     </aside>
 
     <main class="stage">
-      <canvas id="c" width="720" height="720"></canvas>
-      <div class="toast" id="toast"></div>
+      <section class="panel2d">
+        <div class="panel-title">Crease editor (flat sheet)</div>
+        <div class="canvas-wrap">
+          <canvas id="editor" width="520" height="520"></canvas>
+        </div>
+        <div class="legend">
+          <span class="valley"><i></i>valley crease</span>
+          <span class="mountain"><i></i>mountain crease</span>
+        </div>
+      </section>
+
+      <section class="panel3d">
+        <div class="panel-title">Folded model (drag to orbit)</div>
+        <div class="canvas-wrap">
+          <canvas id="view3d" width="760" height="600"></canvas>
+          <div class="toast" id="toast"></div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -214,10 +212,12 @@
   (() => {
     "use strict";
 
-    const canvas = document.getElementById("c");
-    const ctx = canvas.getContext("2d");
+    // ===================== DOM =====================
+    const editor = document.getElementById("editor");
+    const ectx = editor.getContext("2d");
+    const view = document.getElementById("view3d");
+    const vctx = view.getContext("2d");
 
-    // ---- DOM ----
     const frontColorEl = document.getElementById("frontColor");
     const backColorEl  = document.getElementById("backColor");
     const presetSel    = document.getElementById("presetSel");
@@ -225,33 +225,71 @@
     const resetBtn     = document.getElementById("resetBtn");
     const exportBtn    = document.getElementById("exportBtn");
     const foldCountEl  = document.getElementById("foldCount");
-    const layerCountEl = document.getElementById("layerCount");
+    const facetCountEl = document.getElementById("facetCount");
     const toastEl      = document.getElementById("toast");
+    const angleEl      = document.getElementById("angle");
+    const angleValEl   = document.getElementById("angleVal");
+    const typeToggle   = document.getElementById("typeToggle");
     const steps = [null, document.getElementById("step-1"),
                          document.getElementById("step-2"),
                          document.getElementById("step-3")];
 
-    // ---- Geometry helpers ----
-    const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
-    const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
-    const scale = (a, s) => ({ x: a.x * s, y: a.y * s });
-    const dot = (a, b) => a.x * b.x + a.y * b.y;
+    let foldType = "valley";
 
-    // Signed value relative to the directed line through p0 with direction d.
-    // Positive on one side, negative on the other.
-    function sideOf(pt, p0, d) {
-      // normal = (-d.y, d.x)
-      return -d.y * (pt.x - p0.x) + d.x * (pt.y - p0.y);
+    // ===================== vec / matrix math =====================
+    const v3 = (x, y, z) => ({ x, y, z });
+    const vsub = (a, b) => v3(a.x - b.x, a.y - b.y, a.z - b.z);
+    const vadd = (a, b) => v3(a.x + b.x, a.y + b.y, a.z + b.z);
+    const vscale = (a, s) => v3(a.x * s, a.y * s, a.z * s);
+    const vdot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const vcross = (a, b) => v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+    const vlen = (a) => Math.hypot(a.x, a.y, a.z);
+    const vnorm = (a) => { const l = vlen(a) || 1; return v3(a.x / l, a.y / l, a.z / l); };
+
+    // A rigid transform T = { R: row-major 3x3, t: vec3 }: p -> R*p + t
+    const IDENT = { R: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: v3(0, 0, 0) };
+    function applyT(T, p) {
+      const R = T.R;
+      return v3(
+        R[0] * p.x + R[1] * p.y + R[2] * p.z + T.t.x,
+        R[3] * p.x + R[4] * p.y + R[5] * p.z + T.t.y,
+        R[6] * p.x + R[7] * p.y + R[8] * p.z + T.t.z
+      );
+    }
+    function matMul(A, B) { // 3x3 * 3x3
+      const C = new Array(9);
+      for (let r = 0; r < 3; r++)
+        for (let c = 0; c < 3; c++)
+          C[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c];
+      return C;
+    }
+    function matVec(R, p) {
+      return v3(R[0]*p.x+R[1]*p.y+R[2]*p.z, R[3]*p.x+R[4]*p.y+R[5]*p.z, R[6]*p.x+R[7]*p.y+R[8]*p.z);
+    }
+    // Compose: result applies B first, then A.
+    function composeT(A, B) {
+      return { R: matMul(A.R, B.R), t: vadd(matVec(A.R, B.t), A.t) };
+    }
+    // Rodrigues rotation matrix about unit axis k by angle a.
+    function rodrigues(k, a) {
+      const c = Math.cos(a), s = Math.sin(a), t = 1 - c;
+      const { x, y, z } = k;
+      return [
+        t*x*x + c,   t*x*y - s*z, t*x*z + s*y,
+        t*x*y + s*z, t*y*y + c,   t*y*z - s*x,
+        t*x*z - s*y, t*y*z + s*x, t*z*z + c
+      ];
+    }
+    // World-space rotation about a line through P with unit dir k, angle a.
+    function rotAboutLine(P, k, a) {
+      const R = rodrigues(k, a);
+      const t = vsub(P, matVec(R, P)); // keep P fixed
+      return { R, t };
     }
 
-    // Reflect a point across the line through p0 with unit direction u.
-    function reflect(pt, p0, u) {
-      const v = sub(pt, p0);
-      const proj = dot(v, u);
-      const onLine = add(p0, scale(u, proj));
-      return { x: 2 * onLine.x - pt.x, y: 2 * onLine.y - pt.y };
-    }
-
+    // ===================== 2D geometry (paper space) =====================
+    const sub2 = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+    const sideOf = (pt, p0, d) => -d.y * (pt.x - p0.x) + d.x * (pt.y - p0.y);
     function polyArea(poly) {
       let a = 0;
       for (let i = 0; i < poly.length; i++) {
@@ -260,350 +298,464 @@
       }
       return Math.abs(a) / 2;
     }
-
-    // Sutherland–Hodgman clip: keep the portion of `poly` whose signed side
-    // (via sideFn) is >= 0 when keepPositive, else <= 0. Returns a polygon
-    // (possibly empty).
+    function polyCentroid(poly) {
+      let x = 0, y = 0;
+      for (const p of poly) { x += p.x; y += p.y; }
+      return { x: x / poly.length, y: y / poly.length };
+    }
     function clipHalfPlane(poly, sideFn, keepPositive) {
       const out = [];
       const inside = (v) => keepPositive ? sideFn(v) >= 0 : sideFn(v) <= 0;
       for (let i = 0; i < poly.length; i++) {
         const cur = poly[i];
         const prev = poly[(i + poly.length - 1) % poly.length];
-        const curIn = inside(cur);
-        const prevIn = inside(prev);
-        if (curIn) {
-          if (!prevIn) out.push(intersect(prev, cur, sideFn));
-          out.push(cur);
-        } else if (prevIn) {
-          out.push(intersect(prev, cur, sideFn));
-        }
+        const ci = inside(cur), pi = inside(prev);
+        if (ci) { if (!pi) out.push(isect(prev, cur, sideFn)); out.push(cur); }
+        else if (pi) out.push(isect(prev, cur, sideFn));
       }
       return out;
     }
-
-    function intersect(a, b, sideFn) {
+    function isect(a, b, sideFn) {
       const sa = sideFn(a), sb = sideFn(b);
       const t = sa / (sa - sb);
       return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
     }
 
-    // ---- Paper model ----
-    // A "facet" is one flat piece of paper at some stacking height.
-    //   poly  : array of {x,y} in canvas space
-    //   front : true if the colored (front) face points toward the viewer
-    // facets[] is ordered bottom -> top.
+    // ===================== Paper model =====================
+    // Each facet: { poly2d: [{x,y}] paper coords, T: transform paper->world, order }
     let facets = [];
-    let history = [];          // stack of previous facet states for undo
+    let creases = [];     // committed crease lines for the editor display: {a,b,type}
+    let history = [];     // undo stack
     let foldCount = 0;
+    let nextOrder = 1;
+    let sheet = { w: 0, h: 0 };
 
     function makeSheet(kind) {
-      const cx = canvas.width / 2, cy = canvas.height / 2;
       let w, h;
-      if (kind === "a4") { w = 440; h = 440 * 1.414; }
-      else { w = 520; h = 520; }
-      h = Math.min(h, canvas.height - 120);
-      const x0 = cx - w / 2, y0 = cy - h / 2;
+      if (kind === "a4") { w = 360; h = 360 * 1.414; }
+      else { w = 440; h = 440; }
+      sheet = { w, h };
       return [{
-        poly: [
-          { x: x0,     y: y0 },
-          { x: x0 + w, y: y0 },
-          { x: x0 + w, y: y0 + h },
-          { x: x0,     y: y0 + h },
+        poly2d: [
+          { x: -w/2, y: -h/2 }, { x: w/2, y: -h/2 },
+          { x: w/2,  y:  h/2 }, { x: -w/2, y: h/2 },
         ],
-        front: true,
+        T: { R: IDENT.R.slice(), t: v3(0, 0, 0) },
+        order: 0,
       }];
     }
 
     function resetPaper() {
       facets = makeSheet(presetSel.value);
-      history = [];
-      foldCount = 0;
-      clearPending();
-      updateStats();
-      draw();
+      creases = []; history = []; foldCount = 0; nextOrder = 1;
+      clearPending(); updateStats(); render();
     }
 
     function snapshot() {
-      // Deep copy for undo.
-      return facets.map(f => ({
-        front: f.front,
-        poly: f.poly.map(p => ({ x: p.x, y: p.y })),
+      return {
+        facets: facets.map(f => ({
+          poly2d: f.poly2d.map(p => ({ x: p.x, y: p.y })),
+          T: { R: f.T.R.slice(), t: v3(f.T.t.x, f.T.t.y, f.T.t.z) },
+          order: f.order,
+        })),
+        creases: creases.map(c => ({ a: { ...c.a }, b: { ...c.b }, type: c.type })),
+        foldCount, nextOrder,
+      };
+    }
+    function restore(s) {
+      facets = s.facets.map(f => ({
+        poly2d: f.poly2d.map(p => ({ x: p.x, y: p.y })),
+        T: { R: f.T.R.slice(), t: v3(f.T.t.x, f.T.t.y, f.T.t.z) },
+        order: f.order,
       }));
+      creases = s.creases.map(c => ({ a: { ...c.a }, b: { ...c.b }, type: c.type }));
+      foldCount = s.foldCount; nextOrder = s.nextOrder;
     }
 
-    // Perform a fold: crease line through a->b, folding the side that
-    // contains `target`. The selected region reflects across the crease,
-    // its faces flip, and folded pieces restack (reversed) on top.
-    function doFold(a, b, target) {
-      const d = sub(b, a);
-      const len = Math.hypot(d.x, d.y);
-      if (len < 1e-6) return false;
-      const u = { x: d.x / len, y: d.y / len };
+    // ---- Build a fold: returns the pending fold (or null) ----
+    function buildFold(a, b, target, type, angleDeg) {
+      const d = sub2(b, a);
+      if (Math.hypot(d.x, d.y) < 1e-6) return null;
       const sideFn = (pt) => sideOf(pt, a, d);
-      const foldPositive = sideFn(target) >= 0; // fold the side the target is on
+      const foldPositive = sideFn(target) >= 0;
 
-      const stay = [];
-      const folded = [];
-
+      const stay = [], move = [];
       for (const f of facets) {
-        // Part that stays put (opposite side of the target).
-        const stayPoly = clipHalfPlane(f.poly, sideFn, !foldPositive);
-        if (polyArea(stayPoly) > 0.5) {
-          stay.push({ poly: stayPoly, front: f.front });
-        }
-        // Part that folds over (same side as the target).
-        const foldPoly = clipHalfPlane(f.poly, sideFn, foldPositive);
-        if (polyArea(foldPoly) > 0.5) {
-          const reflected = foldPoly.map(p => reflect(p, a, u));
-          folded.push({ poly: reflected, front: !f.front });
+        const stayPoly = clipHalfPlane(f.poly2d, sideFn, !foldPositive);
+        if (polyArea(stayPoly) > 0.5) stay.push({ poly2d: stayPoly, T: f.T, order: f.order });
+
+        const movePoly = clipHalfPlane(f.poly2d, sideFn, foldPositive);
+        if (polyArea(movePoly) > 0.5) {
+          const A3 = applyT(f.T, v3(a.x, a.y, 0));
+          const B3 = applyT(f.T, v3(b.x, b.y, 0));
+          const k = vnorm(vsub(B3, A3));
+          move.push({ poly2d: movePoly, T: f.T, P: A3, k, order: f.order, centroid2d: polyCentroid(movePoly) });
         }
       }
+      if (move.length === 0) return null;
 
-      if (folded.length === 0) return false; // nothing on that side to fold
+      // Decide rotation sign so that "valley" lifts the moving flap toward +Z.
+      const rep = move.reduce((m, c) => polyArea(c.poly2d) > polyArea(m.poly2d) ? c : m, move[0]);
+      const c0 = applyT(rep.T, v3(rep.centroid2d.x, rep.centroid2d.y, 0));
+      const test = applyT(rotAboutLine(rep.P, rep.k, 0.1), c0);
+      const upSign = (test.z >= c0.z) ? 1 : -1;
+      const sign = (type === "valley") ? upSign : -upSign;
 
-      // Folding a stack inverts its order, and it lands on top of the rest.
-      folded.reverse();
-      facets = stay.concat(folded);
-      return true;
+      return {
+        stay, move, sign,
+        target: (angleDeg * Math.PI) / 180,
+        type, crease: { a: { ...a }, b: { ...b }, type },
+        order: nextOrder++,
+      };
     }
 
-    // ---- Rendering ----
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawBackdrop();
+    function facetsForAngle(pending, angle) {
+      const out = [];
+      for (const s of pending.stay) out.push({ poly2d: s.poly2d, T: s.T, order: s.order });
+      for (const m of pending.move) {
+        const rot = rotAboutLine(m.P, m.k, pending.sign * angle);
+        out.push({ poly2d: m.poly2d, T: composeT(rot, m.T), order: pending.order });
+      }
+      return out;
+    }
 
-      const frontCol = frontColorEl.value;
-      const backCol  = backColorEl.value;
+    // ===================== 3D camera & render =====================
+    const cam = { yaw: -Math.PI / 2, pitch: 0.62, radius: 1100 };
+    const fov = 48 * Math.PI / 180;
+    const lightDir = vnorm(v3(0.35, -0.45, 0.82));
 
-      for (const f of facets) {
-        ctx.save();
-        ctx.beginPath();
-        tracel(f.poly);
-        ctx.closePath();
+    function cameraBasis() {
+      const eye = v3(
+        cam.radius * Math.cos(cam.pitch) * Math.cos(cam.yaw),
+        cam.radius * Math.cos(cam.pitch) * Math.sin(cam.yaw),
+        cam.radius * Math.sin(cam.pitch)
+      );
+      const up = v3(0, 0, 1);
+      const zc = vnorm(eye);                 // points from target(origin) to eye
+      const xc = vnorm(vcross(up, zc));
+      const yc = vcross(zc, xc);
+      // view: camPt = Rv*(world) + tv, with Rv rows = xc,yc,zc and tv = -Rv*eye
+      const Rv = [xc.x, xc.y, xc.z, yc.x, yc.y, yc.z, zc.x, zc.y, zc.z];
+      const tv = vscale(matVec(Rv, eye), -1);
+      return { eye, Rv, tv };
+    }
 
-        // Soft shadow gives stacked flaps a sense of depth.
-        ctx.shadowColor = "rgba(0,0,0,0.32)";
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetX = 1.5;
-        ctx.shadowOffsetY = 3;
+    function project(p, basis, cx, cy, focal) {
+      const c = vadd(matVec(basis.Rv, p), basis.tv); // camera space; looks down -Z
+      const denom = -c.z;
+      if (denom <= 1) return null;
+      return { x: cx + focal * c.x / denom, y: cy - focal * c.y / denom, cz: c.z };
+    }
 
-        ctx.fillStyle = f.front ? frontCol : backCol;
-        ctx.fill();
+    function shade(hex, f) {
+      const n = parseInt(hex.slice(1), 16);
+      const r = Math.min(255, ((n >> 16) & 255) * f);
+      const g = Math.min(255, ((n >> 8) & 255) * f);
+      const b = Math.min(255, (n & 255) * f);
+      return `rgb(${r|0},${g|0},${b|0})`;
+    }
 
-        // Crisp edge on top of the fill (no shadow on the stroke).
-        ctx.shadowColor = "transparent";
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = f.front ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.18)";
-        ctx.stroke();
-        ctx.restore();
+    function render() { renderEditor(); render3D(facets); }
+
+    function render3D(fs) {
+      const W = view.width, H = view.height;
+      vctx.clearRect(0, 0, W, H);
+      // backdrop
+      const grad = vctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, "#0e1320"); grad.addColorStop(1, "#0a0d15");
+      vctx.fillStyle = grad; vctx.fillRect(0, 0, W, H);
+
+      const basis = cameraBasis();
+      const cx = W / 2, cy = H / 2;
+      const focal = (H / 2) / Math.tan(fov / 2);
+      const frontCol = frontColorEl.value, backCol = backColorEl.value;
+
+      // Build drawable facets with projected points + depth.
+      const draw = [];
+      for (const f of fs) {
+        const world = f.poly2d.map(p => applyT(f.T, v3(p.x, p.y, 0)));
+        const proj = world.map(p => project(p, basis, cx, cy, focal));
+        if (proj.some(p => p === null)) continue;
+        let depth = 0; for (const p of proj) depth += p.cz; depth /= proj.length;
+
+        // world normal = R * (0,0,1) = third column of R
+        const R = f.T.R;
+        const nWorld = vnorm(v3(R[2], R[5], R[8]));
+        const centroidW = world.reduce((s, p) => vadd(s, p), v3(0,0,0));
+        const cW = vscale(centroidW, 1 / world.length);
+        const toCam = vnorm(vsub(basis.eye, cW));
+        const seesFront = vdot(nWorld, toCam) >= 0;
+        const intensity = 0.42 + 0.58 * Math.abs(vdot(nWorld, lightDir));
+        const base = seesFront ? frontCol : backCol;
+        draw.push({ proj, depth, order: f.order, fill: shade(base, intensity), front: seesFront });
       }
 
+      // Painter's sort: farthest (most negative cz) first; tie-break by fold order.
+      const eps = 0.5;
+      draw.sort((a, b) => {
+        if (Math.abs(a.depth - b.depth) > eps) return a.depth - b.depth;
+        return a.order - b.order;
+      });
+
+      for (const d of draw) {
+        vctx.beginPath();
+        vctx.moveTo(d.proj[0].x, d.proj[0].y);
+        for (let i = 1; i < d.proj.length; i++) vctx.lineTo(d.proj[i].x, d.proj[i].y);
+        vctx.closePath();
+        vctx.fillStyle = d.fill;
+        vctx.fill();
+        vctx.lineWidth = 1;
+        vctx.strokeStyle = d.front ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.16)";
+        vctx.stroke();
+      }
+    }
+
+    // ===================== 2D editor render =====================
+    // Map paper coords -> editor canvas.
+    function ev(p) {
+      const s = Math.min(editor.width, editor.height) / (Math.max(sheet.w, sheet.h) + 80);
+      return { x: editor.width / 2 + p.x * s, y: editor.height / 2 + p.y * s };
+    }
+    function evInv(p) {
+      const s = Math.min(editor.width, editor.height) / (Math.max(sheet.w, sheet.h) + 80);
+      return { x: (p.x - editor.width / 2) / s, y: (p.y - editor.height / 2) / s };
+    }
+
+    function renderEditor() {
+      const W = editor.width, H = editor.height;
+      ectx.clearRect(0, 0, W, H);
+      // grid
+      ectx.save();
+      ectx.strokeStyle = "rgba(255,255,255,0.035)";
+      ectx.lineWidth = 1;
+      for (let x = 36; x < W; x += 36) { ectx.beginPath(); ectx.moveTo(x+.5,0); ectx.lineTo(x+.5,H); ectx.stroke(); }
+      for (let y = 36; y < H; y += 36) { ectx.beginPath(); ectx.moveTo(0,y+.5); ectx.lineTo(W,y+.5); ectx.stroke(); }
+      ectx.restore();
+
+      // the flat sheet outline
+      const hw = sheet.w/2, hh = sheet.h/2;
+      const corners = [{x:-hw,y:-hh},{x:hw,y:-hh},{x:hw,y:hh},{x:-hw,y:hh}].map(ev);
+      ectx.save();
+      ectx.beginPath();
+      ectx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 4; i++) ectx.lineTo(corners[i].x, corners[i].y);
+      ectx.closePath();
+      ectx.fillStyle = "rgba(244,239,226,0.06)";
+      ectx.fill();
+      ectx.strokeStyle = "rgba(244,239,226,0.45)";
+      ectx.lineWidth = 1.5;
+      ectx.stroke();
+
+      // committed creases clipped to the sheet
+      for (const c of creases) drawCreaseLine(c.a, c.b, c.type, false);
+
+      // pending preview
       drawPending();
+      ectx.restore();
     }
 
-    function tracel(poly) {
-      ctx.moveTo(poly[0].x, poly[0].y);
-      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
-    }
-
-    function drawBackdrop() {
-      const step = 36;
-      ctx.save();
-      ctx.strokeStyle = "rgba(255,255,255,0.035)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let x = step; x < canvas.width; x += step) {
-        ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, canvas.height);
+    function clipLineToSheet(a, b) {
+      // clip an infinite line (through a,b) to the sheet rectangle
+      const hw = sheet.w/2, hh = sheet.h/2;
+      const rect = [{x:-hw,y:-hh},{x:hw,y:-hh},{x:hw,y:hh},{x:-hw,y:hh}];
+      const d = sub2(b, a);
+      const sideFn = (pt) => sideOf(pt, a, d);
+      // find intersections of the line with rectangle edges
+      const pts = [];
+      for (let i = 0; i < 4; i++) {
+        const p = rect[i], q = rect[(i+1)%4];
+        const sp = sideFn(p), sq = sideFn(q);
+        if ((sp <= 0 && sq > 0) || (sp >= 0 && sq < 0) || (sp === 0)) {
+          if (sp === 0) pts.push(p);
+          else if ((sp < 0) !== (sq < 0)) pts.push(isect(p, q, sideFn));
+        }
       }
-      for (let y = step; y < canvas.height; y += step) {
-        ctx.moveTo(0, y + 0.5); ctx.lineTo(canvas.width, y + 0.5);
-      }
-      ctx.stroke();
-      ctx.restore();
+      return pts.length >= 2 ? [pts[0], pts[1]] : null;
     }
 
-    // ---- Interaction (the 3-click fold) ----
-    // pending stage: 0 = need start, 1 = need end, 2 = need fold side
-    let stage = 0;
-    let creaseA = null, creaseB = null;
-    let mouse = null;
-
-    function clearPending() {
-      stage = 0; creaseA = null; creaseB = null;
-      highlightStep(1);
+    function drawCreaseLine(a, b, type, emphasize) {
+      const seg = clipLineToSheet(a, b);
+      if (!seg) return;
+      const p1 = ev(seg[0]), p2 = ev(seg[1]);
+      ectx.save();
+      ectx.setLineDash(type === "mountain" ? [3, 4] : [8, 5]);
+      ectx.strokeStyle = type === "mountain" ? "#ef6f6f" : "#6ea8fe";
+      ectx.lineWidth = emphasize ? 2.5 : 1.6;
+      ectx.beginPath(); ectx.moveTo(p1.x, p1.y); ectx.lineTo(p2.x, p2.y); ectx.stroke();
+      ectx.restore();
     }
 
-    function highlightStep(n) {
-      for (let i = 1; i <= 3; i++) steps[i].classList.toggle("active", i === n);
-    }
+    // ===================== Interaction: 3-click fold =====================
+    let stage = 0;            // 0 need start, 1 need end, 2 need side
+    let creaseA = null, creaseB = null, mousePaper = null;
+    let animating = false;
 
-    function canvasPoint(evt) {
-      const r = canvas.getBoundingClientRect();
-      const sx = canvas.width / r.width, sy = canvas.height / r.height;
+    function clearPending() { stage = 0; creaseA = creaseB = null; highlightStep(1); }
+    function highlightStep(n) { for (let i = 1; i <= 3; i++) steps[i].classList.toggle("active", i === n); }
+
+    function editorPoint(evt) {
+      const r = editor.getBoundingClientRect();
+      const sx = editor.width / r.width, sy = editor.height / r.height;
       const src = evt.touches ? evt.touches[0] : evt;
-      return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
+      return evInv({ x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy });
     }
 
-    function onClick(evt) {
+    function onEditorClick(evt) {
       evt.preventDefault();
-      const p = canvasPoint(evt);
-      if (stage === 0) {
-        creaseA = p; stage = 1; highlightStep(2);
-      } else if (stage === 1) {
-        if (Math.hypot(p.x - creaseA.x, p.y - creaseA.y) < 6) return; // too close
+      if (animating) return;
+      const p = editorPoint(evt);
+      if (stage === 0) { creaseA = p; stage = 1; highlightStep(2); }
+      else if (stage === 1) {
+        if (Math.hypot(p.x - creaseA.x, p.y - creaseA.y) < 5) return;
         creaseB = p; stage = 2; highlightStep(3);
       } else if (stage === 2) {
+        const pending = buildFold(creaseA, creaseB, p, foldType, +angleEl.value);
+        if (!pending) { toast("Nothing on that side — try the other side"); clearPending(); renderEditor(); return; }
         history.push(snapshot());
-        const ok = doFold(creaseA, creaseB, p);
-        if (ok) {
-          foldCount++;
-          undoBtn.disabled = false;
-          toast("Folded");
-        } else {
-          history.pop();
-          toast("Nothing on that side — click the other side");
-        }
+        undoBtn.disabled = false;
+        animateFold(pending);
         clearPending();
-        updateStats();
       }
-      draw();
+      renderEditor();
     }
 
-    function onMove(evt) {
-      mouse = canvasPoint(evt);
-      if (stage >= 1) draw();
+    function onEditorMove(evt) {
+      mousePaper = editorPoint(evt);
+      if (stage >= 1) renderEditor();
     }
 
     function drawPending() {
-      // Preview the crease line and the chosen points.
       if (stage >= 1 && creaseA) {
-        const end = (stage === 1 && mouse) ? mouse : creaseB;
-        if (end) {
-          // Extend the crease across the whole canvas for clarity.
-          const d = sub(end, creaseA);
-          const len = Math.hypot(d.x, d.y) || 1;
-          const u = { x: d.x / len, y: d.y / len };
-          const big = 2000;
-          const p1 = { x: creaseA.x - u.x * big, y: creaseA.y - u.y * big };
-          const p2 = { x: creaseA.x + u.x * big, y: creaseA.y + u.y * big };
-          ctx.save();
-          ctx.setLineDash([7, 6]);
-          ctx.strokeStyle = "rgba(110,168,254,0.9)";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-          ctx.stroke();
-          ctx.restore();
-        }
+        const end = (stage === 1 && mousePaper) ? mousePaper : creaseB;
+        if (end && Math.hypot(end.x - creaseA.x, end.y - creaseA.y) > 1)
+          drawCreaseLine(creaseA, end, foldType, true);
         dot2(creaseA);
         if (stage === 2 && creaseB) dot2(creaseB);
       }
-      // When choosing a side, shade the side under the cursor.
-      if (stage === 2 && creaseB && mouse) {
-        const d = sub(creaseB, creaseA);
+      // shade the side under cursor
+      if (stage === 2 && creaseB && mousePaper) {
+        const d = sub2(creaseB, creaseA);
         const sideFn = (pt) => sideOf(pt, creaseA, d);
-        const keepPos = sideFn(mouse) >= 0;
-        ctx.save();
-        ctx.fillStyle = "rgba(110,168,254,0.14)";
-        for (const f of facets) {
-          const part = clipHalfPlane(f.poly, sideFn, keepPos);
-          if (polyArea(part) > 0.5) {
-            ctx.beginPath(); tracel(part); ctx.closePath(); ctx.fill();
-          }
+        const keepPos = sideFn(mousePaper) >= 0;
+        const hw = sheet.w/2, hh = sheet.h/2;
+        const part = clipHalfPlane([{x:-hw,y:-hh},{x:hw,y:-hh},{x:hw,y:hh},{x:-hw,y:hh}], sideFn, keepPos);
+        if (polyArea(part) > 0.5) {
+          ectx.save();
+          ectx.fillStyle = foldType === "mountain" ? "rgba(239,111,111,0.16)" : "rgba(110,168,254,0.16)";
+          ectx.beginPath();
+          const q0 = ev(part[0]); ectx.moveTo(q0.x, q0.y);
+          for (let i = 1; i < part.length; i++) { const q = ev(part[i]); ectx.lineTo(q.x, q.y); }
+          ectx.closePath(); ectx.fill(); ectx.restore();
         }
-        ctx.restore();
       }
     }
-
     function dot2(p) {
-      ctx.save();
-      ctx.fillStyle = "#6ea8fe";
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
-      ctx.restore();
+      const q = ev(p);
+      ectx.save();
+      ectx.fillStyle = "#6ea8fe"; ectx.strokeStyle = "#fff"; ectx.lineWidth = 2;
+      ectx.beginPath(); ectx.arc(q.x, q.y, 5, 0, Math.PI * 2); ectx.fill(); ectx.stroke();
+      ectx.restore();
     }
 
-    // ---- Stats / misc ----
-    function updateStats() {
-      foldCountEl.textContent = foldCount;
-      layerCountEl.textContent = estimateMaxLayers();
-    }
-
-    // Rough max-overlap estimate: sample points and count covering facets.
-    function estimateMaxLayers() {
-      let max = 1;
-      const grid = 24;
-      for (let gx = 0; gx <= grid; gx++) {
-        for (let gy = 0; gy <= grid; gy++) {
-          const pt = { x: (gx / grid) * canvas.width, y: (gy / grid) * canvas.height };
-          let c = 0;
-          for (const f of facets) if (pointInPoly(pt, f.poly)) c++;
-          if (c > max) max = c;
+    // ===================== Fold animation =====================
+    function animateFold(pending) {
+      animating = true;
+      const dur = 480;
+      const start = performance.now();
+      function frame(now) {
+        const t = Math.min(1, (now - start) / dur);
+        const e = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; // easeInOut
+        const angle = pending.target * e;
+        render3D(facetsForAngle(pending, angle));
+        if (t < 1) { requestAnimationFrame(frame); }
+        else {
+          facets = facetsForAngle(pending, pending.target);
+          creases.push(pending.crease);
+          foldCount++;
+          animating = false;
+          updateStats();
+          render();
+          toast(pending.type === "valley" ? "Valley fold" : "Mountain fold");
         }
       }
-      return max;
+      requestAnimationFrame(frame);
     }
 
-    function pointInPoly(pt, poly) {
-      let inside = false;
-      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-        const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
-        const hit = ((yi > pt.y) !== (yj > pt.y)) &&
-                    (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
-        if (hit) inside = !inside;
-      }
-      return inside;
+    // ===================== 3D orbit =====================
+    let dragging = false, lastX = 0, lastY = 0;
+    function onDown(evt) {
+      dragging = true;
+      const s = evt.touches ? evt.touches[0] : evt;
+      lastX = s.clientX; lastY = s.clientY;
     }
+    function onDrag(evt) {
+      if (!dragging) return;
+      evt.preventDefault();
+      const s = evt.touches ? evt.touches[0] : evt;
+      cam.yaw   += (s.clientX - lastX) * 0.01;
+      cam.pitch += (s.clientY - lastY) * 0.01;
+      cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch));
+      lastX = s.clientX; lastY = s.clientY;
+      if (!animating) render3D(facets);
+    }
+    function onUp() { dragging = false; }
 
+    view.addEventListener("mousedown", onDown);
+    window.addEventListener("mousemove", onDrag);
+    window.addEventListener("mouseup", onUp);
+    view.addEventListener("touchstart", onDown, { passive: false });
+    view.addEventListener("touchmove", onDrag, { passive: false });
+    view.addEventListener("touchend", onUp);
+    view.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      cam.radius = Math.max(450, Math.min(2400, cam.radius * (1 + Math.sign(e.deltaY) * 0.08)));
+      if (!animating) render3D(facets);
+    }, { passive: false });
+
+    // ===================== misc UI =====================
+    function updateStats() { foldCountEl.textContent = foldCount; facetCountEl.textContent = facets.length; }
     let toastTimer = null;
     function toast(msg) {
-      toastEl.textContent = msg;
-      toastEl.classList.add("show");
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1400);
+      toastEl.textContent = msg; toastEl.classList.add("show");
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1300);
     }
 
-    // ---- Events ----
-    canvas.addEventListener("click", onClick);
-    canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("touchstart", onClick, { passive: false });
-    canvas.addEventListener("touchmove", (e) => { onMove(e); e.preventDefault(); }, { passive: false });
+    editor.addEventListener("click", onEditorClick);
+    editor.addEventListener("mousemove", onEditorMove);
+    editor.addEventListener("touchstart", onEditorClick, { passive: false });
+
+    typeToggle.addEventListener("click", (e) => {
+      const btn = e.target.closest("button"); if (!btn) return;
+      foldType = btn.dataset.type;
+      [...typeToggle.children].forEach(b => b.classList.toggle("on", b === btn));
+      renderEditor();
+    });
+    angleEl.addEventListener("input", () => { angleValEl.textContent = angleEl.value + "°"; });
 
     undoBtn.addEventListener("click", () => {
-      if (history.length === 0) return;
-      facets = history.pop();
-      foldCount = Math.max(0, foldCount - 1);
+      if (animating || history.length === 0) return;
+      restore(history.pop());
       undoBtn.disabled = history.length === 0;
-      clearPending();
-      updateStats();
-      draw();
+      clearPending(); updateStats(); render();
     });
-
-    resetBtn.addEventListener("click", resetPaper);
-    presetSel.addEventListener("change", resetPaper);
-    frontColorEl.addEventListener("input", draw);
-    backColorEl.addEventListener("input", draw);
+    resetBtn.addEventListener("click", () => { if (!animating) resetPaper(); });
+    presetSel.addEventListener("change", () => { if (!animating) resetPaper(); });
+    frontColorEl.addEventListener("input", render);
+    backColorEl.addEventListener("input", render);
 
     exportBtn.addEventListener("click", () => {
       const link = document.createElement("a");
-      link.download = "origami.png";
-      link.href = canvas.toDataURL("image/png");
+      link.download = "origami-3d.png";
+      link.href = view.toDataURL("image/png");
       link.click();
     });
 
     window.addEventListener("keydown", (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        e.preventDefault(); undoBtn.click();
-      } else if (e.key === "Escape") {
-        clearPending(); draw();
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undoBtn.click(); }
+      else if (e.key === "Escape") { clearPending(); renderEditor(); }
     });
 
-    // ---- Boot ----
+    // ===================== boot =====================
     resetPaper();
   })();
   </script>
