@@ -167,7 +167,7 @@
           <select id="styleSel" class="btn" style="flex:1">
             <option value="simple">Simple fold</option>
             <option value="reverse">Reverse fold</option>
-            <option value="squash">Squash (open)</option>
+            <option value="squash">Open flap (pocket)</option>
           </select>
         </div>
         <div class="footnote" id="styleHint" style="display:none"></div>
@@ -205,7 +205,7 @@
         <div class="row">
           <button class="btn preset" data-model="flap">Top-flap demo</button>
           <button class="btn preset" data-model="reverse">Reverse-fold demo</button>
-          <button class="btn preset" data-model="squash">Squash demo</button>
+          <button class="btn preset" data-model="squash">Open-flap demo</button>
         </div>
         <div class="footnote">Plays a fold sequence on a fresh sheet. The flap demo uses a top-layer fold.</div>
       </div>
@@ -463,53 +463,59 @@
     //                      nests adjacent to its origin layer instead of
     //                      stacking on top. type picks inside (valley) vs
     //                      outside (mountain) of the origin.
-    // ---- Squash (open): split the selected flap along the crease and lift
-    // both halves symmetrically about it, opening the pocket so the layer
-    // beneath shows between them. Each half rotates by an opposite sign. ----
+    // ---- Open flap: lift the selected flap about its existing spine (a
+    // crease edge), opening the pocket so the inside / layer beneath shows.
+    // (a,b)+target choose which flap; the hinge is the flap's spine = its
+    // crease edge farthest from the tip you clicked. One rigid panel, so it
+    // can't collapse the way a split-and-rotate would. ----
     function buildSquash(a, b, target, angleDeg, layers) {
       const d = sub2(b, a);
       if (Math.hypot(d.x, d.y) < 1e-6) return null;
       const sideFn = (pt) => sideOf(pt, a, d);
+      const foldPositive = sideFn(target) >= 0;
 
-      // Flap candidates: facets the crease actually passes through.
-      const crossing = facets.filter(f =>
-        polyArea(clipHalfPlane(f.poly2d, sideFn, true)) > 0.5 &&
-        polyArea(clipHalfPlane(f.poly2d, sideFn, false)) > 0.5);
-      if (crossing.length === 0) return null;
+      const onFold = facets.filter(f =>
+        polyArea(clipHalfPlane(f.poly2d, sideFn, foldPositive)) > 0.5);
+      if (onFold.length === 0) return null;
 
       let selected;
       if (!layers || layers === "all") {
-        selected = new Set(crossing);
+        selected = new Set(onFold);
       } else {
         const k = parseInt(layers, 10);
-        const gens = [...new Set(crossing.map(f => f.order))].sort((x, y) => y - x);
+        const gens = [...new Set(onFold.map(f => f.order))].sort((x, y) => y - x);
         const keep = new Set(gens.slice(0, k));
-        selected = new Set(crossing.filter(f => keep.has(f.order)));
+        selected = new Set(onFold.filter(f => keep.has(f.order)));
       }
 
       const stay = [], move = [];
       for (const f of facets) {
         const fe = f.edges || f.poly2d.map(() => "raw");
         if (!selected.has(f)) { stay.push({ poly2d: f.poly2d, edges: fe, T: f.T, order: f.order }); continue; }
-        const A3 = applyT(f.T, v3(a.x, a.y, 0));
-        const B3 = applyT(f.T, v3(b.x, b.y, 0));
+        // spine = crease edge of this facet farthest from the clicked tip
+        let spine = null, best = -1;
+        for (let i = 0; i < f.poly2d.length; i++) {
+          if (fe[i] !== "crease") continue;
+          const p1 = f.poly2d[i], p2 = f.poly2d[(i + 1) % f.poly2d.length];
+          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+          const dist = Math.hypot(mid.x - target.x, mid.y - target.y);
+          if (dist > best) { best = dist; spine = { p1, p2 }; }
+        }
+        if (!spine) { stay.push({ poly2d: f.poly2d, edges: fe, T: f.T, order: f.order }); continue; }
+        const A3 = applyT(f.T, v3(spine.p1.x, spine.p1.y, 0));
+        const B3 = applyT(f.T, v3(spine.p2.x, spine.p2.y, 0));
         const k = vnorm(vsub(B3, A3));
-        const plus = clipWithLabels(f.poly2d, fe, sideFn, true);
-        const minus = clipWithLabels(f.poly2d, fe, sideFn, false);
-        if (polyArea(plus.poly) > 0.5)
-          move.push({ poly2d: plus.poly, edges: plus.edges, T: f.T, P: A3, k, src: f.order, signMul: 1, centroid2d: polyCentroid(plus.poly) });
-        if (polyArea(minus.poly) > 0.5)
-          move.push({ poly2d: minus.poly, edges: minus.edges, T: f.T, P: A3, k, src: f.order, signMul: -1, centroid2d: polyCentroid(minus.poly) });
+        move.push({ poly2d: f.poly2d, edges: fe, T: f.T, P: A3, k, src: f.order, centroid2d: polyCentroid(f.poly2d) });
       }
       if (move.length === 0) return null;
 
-      // Sign so the +half lifts toward +Z (the -half mirrors, also up).
-      const rep = move.find(m => m.signMul === 1) || move[0];
+      // Sign so the flap lifts toward +Z (open upward).
+      const rep = move[0];
       const c0 = applyT(rep.T, v3(rep.centroid2d.x, rep.centroid2d.y, 0));
-      const test = applyT(rotAboutLine(rep.P, rep.k, 0.1 * rep.signMul), c0);
+      const test = applyT(rotAboutLine(rep.P, rep.k, 0.1), c0);
       const sign = (test.z >= c0.z) ? 1 : -1;
 
-      // Lifted halves sit above the pile.
+      // Lifted flap sits above the pile.
       const maxS = Math.max(...facets.map(f => f.order));
       move.slice().sort((p, q) => p.src - q.src).forEach((m, i) => { m.order = maxS + 1 + i; });
       stay.concat(move).sort((x, y) => x.order - y.order).forEach((it, i) => { it.order = i; });
@@ -973,11 +979,11 @@
         { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
         { a: [-0.5, -0.25], b: [0.5, -0.25], side: [0, -0.4], type: "valley", angle: 180, layers: "all", style: "reverse" },
       ],
-      // Squash demo: make a 2-layer flap, then squash-open the top layer about
-      // its centre line so the pocket opens and the layer below shows.
+      // Open-flap demo: make a 2-layer flap, then lift the top layer about its
+      // spine (the central fold) so the pocket opens and the layer below shows.
       squash: [
         { a: [0, -0.5], b: [0, 0.5], side: [0.25, 0], type: "valley", angle: 180, layers: "all" },
-        { a: [-0.25, -0.5], b: [-0.25, 0.5], side: [-0.4, 0], type: "valley", angle: 90, layers: "1", style: "squash" },
+        { a: [-0.5, -0.5], b: [-0.5, 0.5], side: [-0.25, 0], type: "valley", angle: 75, layers: "1", style: "squash" },
       ],
     };
 
@@ -1072,7 +1078,7 @@
       const hint = document.getElementById("styleHint");
       const msgs = {
         reverse: "Reverse fold: the tip nests into the flap. Valley = tuck inside, mountain = wrap outside. Draw the crease across a folded flap.",
-        squash: "Squash (open): draw a crease across a flap; both halves lift symmetrically about it, opening the pocket. Use a partial angle (~90°).",
+        squash: "Open flap: draw a line across the flap and click its side; the flap lifts about its spine (existing fold), opening the pocket. Use a partial angle (~100°).",
       };
       hint.textContent = msgs[foldStyle] || "";
       hint.style.display = msgs[foldStyle] ? "" : "none";
