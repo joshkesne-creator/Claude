@@ -364,8 +364,6 @@
     let creases = [];     // committed crease lines for the editor display: {a,b,type}
     let history = [];     // undo stack
     let foldCount = 0;
-    let nextUp = 1;       // stacking order for valley flaps (push up)
-    let nextDown = -1;    // stacking order for mountain flaps (push down)
     let sheet = { w: 0, h: 0 };
 
     function makeSheet(kind) {
@@ -385,7 +383,7 @@
 
     function resetPaper() {
       facets = makeSheet(presetSel.value);
-      creases = []; history = []; foldCount = 0; nextUp = 1; nextDown = -1;
+      creases = []; history = []; foldCount = 0;
       clearPending(); updateStats(); render();
     }
 
@@ -397,7 +395,7 @@
           order: f.order,
         })),
         creases: creases.map(c => ({ a: { ...c.a }, b: { ...c.b }, type: c.type })),
-        foldCount, nextUp, nextDown,
+        foldCount,
       };
     }
     function restore(s) {
@@ -407,7 +405,7 @@
         order: f.order,
       }));
       creases = s.creases.map(c => ({ a: { ...c.a }, b: { ...c.b }, type: c.type }));
-      foldCount = s.foldCount; nextUp = s.nextUp; nextDown = s.nextDown;
+      foldCount = s.foldCount;
     }
 
     // ---- Build a fold: returns the pending fold (or null) ----
@@ -447,7 +445,7 @@
           const A3 = applyT(f.T, v3(a.x, a.y, 0));
           const B3 = applyT(f.T, v3(b.x, b.y, 0));
           const k = vnorm(vsub(B3, A3));
-          move.push({ poly2d: movePoly, T: f.T, P: A3, k, order: f.order, centroid2d: polyCentroid(movePoly) });
+          move.push({ poly2d: movePoly, T: f.T, P: A3, k, src: f.order, centroid2d: polyCentroid(movePoly) });
         }
       }
       if (move.length === 0) return null;
@@ -459,17 +457,24 @@
       const upSign = (test.z >= c0.z) ? 1 : -1;
       const sign = (type === "valley") ? upSign : -upSign;
 
-      // Valley flaps stack on top (rising order); mountain flaps tuck
-      // underneath (falling order), matching the physical pile.
-      const newOrder = (type === "valley") ? nextUp++ : nextDown--;
+      // Geometric layer ordering (reverse-and-stack). The moving layers
+      // flip as a group, so their relative stacking REVERSES; the group
+      // then lands above the whole pile (valley) or tucks beneath it
+      // (mountain). order is a true pile rank: higher = physically higher.
+      const stacks = facets.map(f => f.order);
+      const maxS = Math.max(...stacks), minS = Math.min(...stacks);
+      const movedBottomUp = move.slice().sort((p, q) => p.src - q.src).reverse();
+      const n = movedBottomUp.length;
+      movedBottomUp.forEach((m, i) => {
+        m.order = (type === "valley") ? (maxS + 1 + i) : (minS - n + i);
+      });
 
       return {
         stay, move, sign,
         target: (angleDeg * Math.PI) / 180,
         type, crease: { a: { ...a }, b: { ...b }, type },
-        order: newOrder,
         layers: layers || "all",
-        movedGens: new Set(move.map(m => m.order)).size,
+        movedGens: new Set(move.map(m => m.src)).size,
       };
     }
 
@@ -478,7 +483,7 @@
       for (const s of pending.stay) out.push({ poly2d: s.poly2d, T: s.T, order: s.order });
       for (const m of pending.move) {
         const rot = rotAboutLine(m.P, m.k, pending.sign * angle);
-        out.push({ poly2d: m.poly2d, T: composeT(rot, m.T), order: pending.order });
+        out.push({ poly2d: m.poly2d, T: composeT(rot, m.T), order: m.order });
       }
       return out;
     }
